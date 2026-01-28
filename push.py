@@ -29,20 +29,15 @@ def main():
     commit_msg = f"Auto update NSL Data: {time_str}"
     
     # 3. Commit
-    # Kiểm tra xem có gì để commit không trước khi chạy lệnh commit
     status = run_cmd("git status --porcelain")
-    if not status:
-        print("✅ Không có thay đổi mới. Kết thúc.")
-        return
+    if status:
+        run_cmd(f'git commit -m "{commit_msg}"')
+    else:
+        print("ℹ️ Không có file mới cần đóng gói, sẽ kiểm tra việc đẩy code cũ...")
 
-    run_cmd(f'git commit -m "{commit_msg}"')
-
-    # 4. Push
+    # 4. Push (Luôn luôn chạy lệnh này)
     print("☁️  Đang đẩy lên GitHub...")
     run_cmd("git push origin main")
-
-    print("\n✅ THÀNH CÔNG! Code đã lên GitHub.")
-    print("👉 Để phát hành bản cập nhật (Build .exe/.dmg), hãy tạo Tag mới trên GitHub hoặc dùng lệnh git tag.")
 
 if __name__ == "__main__":
     main()
