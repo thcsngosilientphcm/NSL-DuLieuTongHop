@@ -1,0 +1,43 @@
+{
+  "productName": "NSL-DuLieuTongHop",
+  "version": "0.1.0",
+  "identifier": "com.nsl.dulieutonghop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "NSL - Dữ Liệu Tổng Hợp",
+        "width": 800,
+        "height": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/thcsngosilientphcm/NSL-DuLieuTongHop/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVCMzg3RjVEOUIwMjYyN0MKUldSOFlnS2JYWDg0Vzd4c2QvM2ovK2xObnp6SWRqcFY5UVJ1bW1WcDd6MVRVSkRiMzMwRVlSdzcK"
+    }
+  }
+}

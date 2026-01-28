@@ -1,0 +1,48 @@
+import subprocess
+import sys
+import datetime
+import os
+
+# Tự động chuyển hướng về đúng thư mục chứa file script để tránh lỗi path
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+def run_cmd(command):
+    print(f"🔹 Đang chạy: {command}")
+    try:
+        # Sử dụng encoding utf-8 để hiển thị tiếng Việt nếu có
+        result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"❌ LỖI: {e.stderr}")
+        sys.exit(1)
+
+def main():
+    print("="*40)
+    print("🚀 NSL-DuLieuTongHop: AUTO PUSH SYSTEM")
+    print("="*40)
+
+    # 1. Add files
+    run_cmd("git add .")
+
+    # 2. Tạo commit message tự động theo giờ
+    time_str = datetime.datetime.now().strftime("%H:%M %d/%m/%Y")
+    commit_msg = f"Auto update NSL Data: {time_str}"
+    
+    # 3. Commit
+    # Kiểm tra xem có gì để commit không trước khi chạy lệnh commit
+    status = run_cmd("git status --porcelain")
+    if not status:
+        print("✅ Không có thay đổi mới. Kết thúc.")
+        return
+
+    run_cmd(f'git commit -m "{commit_msg}"')
+
+    # 4. Push
+    print("☁️  Đang đẩy lên GitHub...")
+    run_cmd("git push origin main")
+
+    print("\n✅ THÀNH CÔNG! Code đã lên GitHub.")
+    print("👉 Để phát hành bản cập nhật (Build .exe/.dmg), hãy tạo Tag mới trên GitHub hoặc dùng lệnh git tag.")
+
+if __name__ == "__main__":
+    main()

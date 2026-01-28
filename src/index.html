@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NSL - Dữ Liệu Tổng Hợp</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        /* Hình nền style hiện đại, trung tính */
+        background: url('https://images.unsplash.com/photo-1497250681960-ef048c0ab947?q=80&w=2070&auto=format&fit=crop') no-repeat center center fixed;
+        background-size: cover;
+      }
+      /* Tắt chức năng chọn văn bản để giống app native */
+      .no-select {
+        -webkit-user-select: none;
+        user-select: none;
+        cursor: default;
+      }
+    </style>
+  </head>
+  <body class="h-screen w-screen overflow-hidden flex items-center justify-center font-sans text-slate-800 no-select">
+    
+    <div class="relative group transition-all duration-500 hover:scale-[1.01]">
+      <div class="absolute -inset-1 bg-gradient-to-tr from-blue-400 to-teal-300 rounded-2xl blur opacity-20 group-hover:opacity-60 transition duration-500"></div>
+      
+      <div class="relative px-12 py-12 bg-white/10 backdrop-blur-2xl border border-white/30 rounded-2xl shadow-[0_8px_32px_0_rgba(31,38,135,0.37)] flex flex-col items-center gap-6 w-[400px]">
+        
+        <div class="h-16 w-16 bg-white/20 rounded-full flex items-center justify-center shadow-inner border border-white/20 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white drop-shadow-md" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
+        </div>
+
+        <h1 class="text-2xl font-bold text-white tracking-wide drop-shadow-md text-center uppercase">
+          NSL Dữ Liệu Tổng Hợp
+        </h1>
+        
+        <div class="w-full h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent"></div>
+
+        <p class="text-slate-100 text-center text-sm font-light tracking-widest">
+          SYSTEM VERSION: <span id="version" class="font-mono font-bold text-teal-200">...</span>
+        </p>
+
+        <div id="status" class="text-xs text-blue-100 italic h-4 text-center">Đang kết nối máy chủ...</div>
+
+        <button id="update-btn" class="hidden group/btn relative px-6 py-2 bg-gradient-to-r from-teal-500/80 to-blue-500/80 hover:from-teal-400 hover:to-blue-400 text-white rounded-lg transition-all shadow-lg hover:shadow-cyan-500/30 backdrop-blur-md border border-white/20">
+          <span class="absolute inset-0 w-full h-full bg-white/20 group-hover/btn:scale-x-0 transition-transform duration-300 origin-left"></span>
+          <span class="relative font-semibold text-sm">Cài đặt bản mới ngay</span>
+        </button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
