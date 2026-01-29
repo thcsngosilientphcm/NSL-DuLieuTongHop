@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, Listener};
+// Đã xóa Listener để sửa cảnh báo warning
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use magic_crypt::{new_magic_crypt, MagicCryptTrait};
 use serde::{Deserialize, Serialize};
+use base64::{engine::general_purpose, Engine as _}; // Dùng để giải mã dữ liệu từ URL
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct AccountStore {
@@ -16,7 +18,7 @@ fn get_creds_path(app: &AppHandle) -> PathBuf {
     app.path().app_data_dir().unwrap().join("creds.json")
 }
 
-// --- HÀM LƯU DỮ LIỆU (ĐÃ TỐI ƯU: KIỂM TRA TRƯỚC KHI LƯU) ---
+// --- HÀM LƯU DỮ LIỆU ---
 fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: String) -> Result<String, String> {
     let path = get_creds_path(app);
     if let Some(parent) = path.parent() { let _ = fs::create_dir_all(parent); }
@@ -30,21 +32,18 @@ fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: Str
 
     let mc = new_magic_crypt!(SECRET_KEY, 256);
     
-    // --- BƯỚC KIỂM TRA THÔNG MINH ---
+    // Kiểm tra trùng lặp trước khi lưu
     if let Some((stored_user, stored_pass_enc)) = store.accounts.get(&domain) {
-        // Nếu user giống nhau, thì mới kiểm tra tiếp password
         if stored_user == &user {
-            // Giải mã password cũ để so sánh
             if let Ok(stored_pass_dec) = mc.decrypt_base64_to_string(stored_pass_enc) {
                 if stored_pass_dec == pass {
-                    println!(">> [SKIP] Dữ liệu không thay đổi. Bỏ qua ghi file.");
+                    println!(">> [SKIP] Dữ liệu không thay đổi.");
                     return Ok("Dữ liệu không đổi".to_string());
                 }
             }
         }
     }
 
-    // Nếu khác biệt, tiến hành mã hóa và lưu
     if !user.trim().is_empty() && !pass.trim().is_empty() {
         let encrypted_pass = mc.encrypt_str_to_base64(&pass);
         store.accounts.insert(domain.clone(), (user, encrypted_pass));
@@ -52,7 +51,7 @@ fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: Str
         let json = serde_json::to_string_pretty(&store).map_err(|e| e.to_string())?;
         fs::write(path, json).map_err(|e| e.to_string())?;
         
-        println!(">> [UPDATED] Đã cập nhật tài khoản mới cho: {}", domain);
+        println!(">> [SAVED] Đã lưu tài khoản mới cho: {}", domain);
         return Ok("Đã lưu thành công!".to_string());
     }
     
@@ -86,10 +85,12 @@ async fn open_secure_window(app: AppHandle, url: String) {
         }
     }
 
+    // --- SCRIPT JAVASCRIPT TIÊM VÀO TRANG WEB ---
     let init_script = format!(r#"
         window.addEventListener('DOMContentLoaded', () => {{
-            console.log("🔥 NSL Smart Injector Active");
+            console.log("🔥 NSL Smart Injector v2 Active");
 
+            // 1. Tự click Tab
             function autoClickTab() {{
                 let spans = document.querySelectorAll('.rtsTxt');
                 for (let span of spans) {{
@@ -101,6 +102,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 }}
             }}
 
+            // 2. Tự điền mật khẩu
             function autoFill() {{
                 const savedUser = "{}";
                 const savedPass = "{}";
@@ -120,13 +122,20 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 }}
             }}
 
+            // 3. Tự động BẮT mật khẩu (Logic Mới dùng URL giả)
             function setupCapture() {{
                 function sendToRust() {{
                     let uInput = document.querySelector('input[name*="UserName"]') || document.querySelector('input[id*="user"]');
                     let pInput = document.querySelector('input[name*="Password"]') || document.querySelector('input[id*="pass"]');
                     
                     if (uInput && pInput && uInput.value && pInput.value) {{
-                        document.title = "NSL_SAVE:::" + uInput.value + ":::" + pInput.value;
+                        // Mã hóa Base64 để tránh lỗi ký tự đặc biệt trong URL
+                        // Dùng unescape(encodeURIComponent(str)) để hỗ trợ tiếng Việt
+                        let u64 = btoa(unescape(encodeURIComponent(uInput.value)));
+                        let p64 = btoa(unescape(encodeURIComponent(pInput.value)));
+                        
+                        // Chuyển hướng đến link ảo. Rust sẽ bắt được link này.
+                        window.location.replace("https://nsl.local/save/" + u64 + "/" + p64);
                     }}
                 }}
 
@@ -154,30 +163,46 @@ async fn open_secure_window(app: AppHandle, url: String) {
         let _ = win.close();
     }
 
-    let window = WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::External(url.parse().unwrap()))
+    let app_handle_clone = app.clone();
+    let domain_clone = domain.clone();
+
+    // TẠO CỬA SỔ VỚI TRÌNH LẮNG NGHE ĐIỀU HƯỚNG (NAVIGATION)
+    let _ = WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::External(url.parse().unwrap()))
         .title("Hệ thống NSL - Secure Browser")
         .inner_size(1200.0, 800.0)
         .initialization_script(&init_script)
-        .build()
-        .unwrap();
+        // --- LOGIC MỚI: BẮT SỰ KIỆN CHUYỂN TRANG ---
+        .on_navigation(move |url| {
+            let url_str = url.as_str();
+            
+            // Kiểm tra xem có phải link ảo "https://nsl.local/save/..." không
+            if url_str.starts_with("https://nsl.local/save/") {
+                // Tách chuỗi để lấy User/Pass
+                // Format: https://nsl.local/save/USER_B64/PASS_B64
+                let parts: Vec<&str> = url_str.split('/').collect();
+                if parts.len() >= 6 {
+                    let user_b64 = parts[4];
+                    let pass_b64 = parts[5];
+                    
+                    // Giải mã Base64 -> String
+                    let user_res = general_purpose::STANDARD.decode(user_b64);
+                    let pass_res = general_purpose::STANDARD.decode(pass_b64);
 
-    let app_handle_clone = app.clone();
-    let domain_clone = domain.clone();
-    let window_clone = window.clone();
-
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::TitleChanged(title) = event {
-            if title.starts_with("NSL_SAVE:::") {
-                let parts: Vec<&str> = title.split(":::").collect();
-                if parts.len() >= 3 {
-                    let user = parts[1].to_string();
-                    let pass = parts[2].to_string();
-                    let _ = perform_save_account(&app_handle_clone, domain_clone.clone(), user, pass);
-                    let _ = window_clone.set_title("Hệ thống NSL - Đang đăng nhập...");
+                    if let (Ok(u_bytes), Ok(p_bytes)) = (user_res, pass_res) {
+                        let user = String::from_utf8(u_bytes).unwrap_or_default();
+                        let pass = String::from_utf8(p_bytes).unwrap_or_default();
+                        
+                        // Gọi hàm lưu
+                        let _ = perform_save_account(&app_handle_clone, domain_clone.clone(), user, pass);
+                    }
                 }
+                // TRẢ VỀ FALSE ĐỂ HỦY CHUYỂN TRANG (Giữ người dùng ở lại trang Login để nó tiếp tục submit)
+                return false; 
             }
-        }
-    });
+            // Các link khác cho phép đi qua
+            true
+        })
+        .build();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
