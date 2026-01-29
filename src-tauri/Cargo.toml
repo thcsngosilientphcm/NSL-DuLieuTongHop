@@ -1,6 +1,6 @@
 [package]
 name = "nsl-dulieutonghop"
-version = "0.0.2" # Nhớ tăng version khi release
+version = "1.0.3" # Nhớ tăng version khi release
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
