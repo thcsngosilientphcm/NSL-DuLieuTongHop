@@ -54,6 +54,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'NSL Update v__VERSION__'
           releaseBody: 'Bản cập nhật tự động cho NSL-DuLieuTongHop.'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
