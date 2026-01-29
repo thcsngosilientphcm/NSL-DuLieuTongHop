@@ -12,23 +12,19 @@
       }
       .no-select { -webkit-user-select: none; user-select: none; cursor: default; }
 
-      /* Hiệu ứng kính cho Sidebar (Đã sửa thứ tự CSS) */
+      /* Hiệu ứng kính cho Sidebar */
       .glass-sidebar {
         background: rgba(255, 255, 255, 0.05);
-        /* Đặt -webkit- lên trước theo yêu cầu của VS Code */
         -webkit-backdrop-filter: blur(10px);
         backdrop-filter: blur(10px);
-        
         border-right: 1px solid rgba(255, 255, 255, 0.1);
       }
 
-      /* Hiệu ứng kính cho Content (Đã sửa thứ tự CSS) */
+      /* Hiệu ứng kính cho Content */
       .glass-panel {
         background: rgba(255, 255, 255, 0.03);
-        /* Đặt -webkit- lên trước */
         -webkit-backdrop-filter: blur(16px);
         backdrop-filter: blur(16px);
-        
         border: 1px solid rgba(255, 255, 255, 0.1);
         box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
       }
@@ -87,6 +83,7 @@
           </button>
           <div id="menu-school" class="submenu pl-9 space-y-1">
             <button class="w-full text-left px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-white/5 rounded-md transition-colors sidebar-text">Ký số học bạ</button>
+            <button class="w-full text-left px-3 py-2 text-xs text-green-400 font-bold hover:text-white hover:bg-white/5 rounded-md transition-colors sidebar-text">⚡ Test Cập Nhật ✅</button>
           </div>
         </div>
 
