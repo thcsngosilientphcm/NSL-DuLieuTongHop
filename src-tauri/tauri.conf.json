@@ -1,6 +1,6 @@
 {
   "productName": "NSL-DuLieuTongHop",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "identifier": "com.nsl.dulieutonghop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -11,9 +11,14 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "NSL - Dữ Liệu Tổng Hợp",
-        "width": 800,
-        "height": 600
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "maximized": true,
+        "decorations": true
       }
     ],
     "security": {

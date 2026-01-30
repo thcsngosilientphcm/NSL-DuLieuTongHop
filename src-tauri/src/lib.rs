@@ -6,7 +6,7 @@ use magic_crypt::{new_magic_crypt, MagicCryptTrait};
 use serde::{Deserialize, Serialize};
 use base64::{engine::general_purpose, Engine as _};
 
-// --- CẤU TRÚC DỮ LIỆU ---
+// --- CẤU TRÚC DỮ LIỆU (4 TRƯỜNG) ---
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct AccountStore {
     accounts: HashMap<String, (String, String, String, String)>,
@@ -50,7 +50,7 @@ fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: Str
     let mc = new_magic_crypt!(SECRET_KEY, 256);
     let encrypted_pass = mc.encrypt_str_to_base64(&pass);
     
-    // Ghi đè thông tin cũ
+    // Ghi đè thông tin
     store.accounts.insert(domain, (user, encrypted_pass, cap, truong));
     save_store(app, &store)?;
     Ok("Đã lưu thành công!".to_string())
@@ -116,7 +116,7 @@ async fn navigate_webview(app: AppHandle, url: String) {
     }
 }
 
-// --- LOGIC QUAN TRỌNG NHẤT: AUTO-FILL & CAPTURE ---
+// --- LOGIC MỚI: HOOK ASP.NET POSTBACK ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -136,14 +136,12 @@ async fn open_secure_window(app: AppHandle, url: String) {
 
     let init_script = format!(r#"
         window.addEventListener('DOMContentLoaded', () => {{
-            console.log("🔥 NSL Injector v8: Specific ID Targeting");
+            console.log("🔥 NSL Injector v9: ASP.NET Hook Activated");
             
             // DỮ LIỆU CẦN ĐIỀN
-            const data = {{
-                u: "{}", p: "{}", c: "{}", t: "{}"
-            }};
+            const data = {{ u: "{}", p: "{}", c: "{}", t: "{}" }};
 
-            // ID CHÍNH XÁC CỦA TRANG WEB
+            // ID CHÍNH XÁC CỦA TRANG WEB (Theo bạn cung cấp)
             const IDS = {{
                 user: "ContentPlaceHolder1_tbU",
                 pass: "ContentPlaceHolder1_tbP",
@@ -152,9 +150,9 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 btn: "ContentPlaceHolder1_btOK"
             }};
 
-            // 1. HÀM ĐIỀN DỮ LIỆU (Chạy liên tục để đảm bảo điền được)
+            // 1. TỰ ĐỘNG ĐIỀN DỮ LIỆU
             function autoFill() {{
-                // Click Tab nếu chưa chọn
+                // Tab
                 let spans = document.querySelectorAll('.rtsTxt');
                 for (let s of spans) {{
                     if (s.innerText.trim() === "Tài khoản QLTH") {{
@@ -166,14 +164,14 @@ async fn open_secure_window(app: AppHandle, url: String) {
 
                 if (!data.u) return;
 
-                // Hàm nhỏ để set giá trị và kích hoạt sự kiện
                 const setVal = (id, val) => {{
                     let el = document.getElementById(id);
                     if (el && el.value !== val) {{
                         el.value = val;
+                        // Trigger đủ các loại sự kiện để web nhận biết
                         el.dispatchEvent(new Event('input', {{bubbles:true}}));
                         el.dispatchEvent(new Event('change', {{bubbles:true}}));
-                        el.dispatchEvent(new Event('blur', {{bubbles:true}})); // Quan trọng cho Telerik
+                        el.dispatchEvent(new Event('blur', {{bubbles:true}}));
                     }}
                 }};
 
@@ -183,70 +181,62 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 if(data.t) setVal(IDS.truong, data.t);
             }}
 
-            // 2. HÀM BẮT SỰ KIỆN ĐĂNG NHẬP (Chặn nút bấm)
-            function setupCapture() {{
-                let btn = document.getElementById(IDS.btn);
-                
-                // Nếu tìm thấy nút và chưa gắn sự kiện
-                if (btn && !btn.hasAttribute('data-nsl-hook')) {{
-                    btn.setAttribute('data-nsl-hook', 'true');
-                    
-                    // GẮN SỰ KIỆN 'CLICK' Ở PHA CAPTURE (Để chặn trước khi WebForm chạy)
-                    btn.addEventListener('click', function(e) {{
-                        // Nếu là lệnh do chính tool gọi lại thì bỏ qua
-                        if (this.getAttribute('data-processing') === 'true') return;
+            // 2. HÀM GỬI VỀ RUST
+            function sendToRust() {{
+                let u = document.getElementById(IDS.user)?.value || "";
+                let p = document.getElementById(IDS.pass)?.value || "";
+                let c = document.getElementById(IDS.cap)?.value || "";
+                let t = document.getElementById(IDS.truong)?.value || "";
 
-                        console.log(">> Đã chặn nút đăng nhập để lưu dữ liệu...");
-                        e.preventDefault(); // Chặn WebForm
-                        e.stopImmediatePropagation(); // Chặn các script khác
+                if (u && p) {{
+                    let u64 = btoa(unescape(encodeURIComponent(u)));
+                    let p64 = btoa(unescape(encodeURIComponent(p)));
+                    let c64 = btoa(unescape(encodeURIComponent(c)));
+                    let t64 = btoa(unescape(encodeURIComponent(t)));
 
-                        // Lấy dữ liệu hiện tại trên form
-                        let u = document.getElementById(IDS.user)?.value || "";
-                        let p = document.getElementById(IDS.pass)?.value || "";
-                        let c = document.getElementById(IDS.cap)?.value || "";
-                        let t = document.getElementById(IDS.truong)?.value || "";
-
-                        if (u && p) {{
-                            // Mã hóa
-                            let u64 = btoa(unescape(encodeURIComponent(u)));
-                            let p64 = btoa(unescape(encodeURIComponent(p)));
-                            let c64 = btoa(unescape(encodeURIComponent(c)));
-                            let t64 = btoa(unescape(encodeURIComponent(t)));
-
-                            // Gửi về Rust bằng Iframe ẩn
-                            let iframe = document.createElement('iframe');
-                            iframe.style.display = 'none';
-                            iframe.src = "https://nsl.local/save/" + u64 + "/" + p64 + "/" + c64 + "/" + t64;
-                            document.body.appendChild(iframe);
-                            
-                            // Dọn dẹp iframe sau 1s
-                            setTimeout(() => {{ if(iframe) iframe.remove(); }}, 1000);
-                        }}
-
-                        // SAU 0.5 GIÂY -> BẤM LẠI NÚT THẬT
-                        let self = this;
-                        self.setAttribute('data-processing', 'true');
-                        setTimeout(() => {{
-                            console.log(">> Tiếp tục đăng nhập...");
-                            self.click(); // Kích hoạt sự kiện gốc
-                            // Reset sau khi click để lần sau bắt tiếp (nếu đăng nhập sai)
-                            setTimeout(() => self.removeAttribute('data-processing'), 2000); 
-                        }}, 500);
-
-                    }}, true); // <--- QUAN TRỌNG: UseCapture = true
+                    // Gửi ngầm qua Iframe, Rust sẽ bắt được qua on_navigation
+                    let iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = "https://nsl.local/save/" + u64 + "/" + p64 + "/" + c64 + "/" + t64;
+                    document.body.appendChild(iframe);
+                    setTimeout(() => {{ if(iframe) iframe.remove(); }}, 500);
+                    console.log(">> Đã gửi dữ liệu đăng nhập về Rust");
                 }}
             }}
 
-            // CHẠY LIÊN TỤC (Giám sát DOM)
+            // 3. KỸ THUẬT MONKEY PATCHING (QUAN TRỌNG NHẤT)
+            // Ghi đè hàm PostBack của ASP.NET để chặn quá trình đăng nhập
+            function hookPostBack() {{
+                if (typeof window.WebForm_DoPostBackWithOptions === 'function' && !window.WebForm_DoPostBackWithOptions.isHooked) {{
+                    const originalPostBack = window.WebForm_DoPostBackWithOptions;
+                    
+                    window.WebForm_DoPostBackWithOptions = function(options) {{
+                        console.log(">> Phát hiện lệnh Đăng nhập -> Tạm dừng để lưu dữ liệu...");
+                        
+                        // 1. Gửi dữ liệu đi trước
+                        sendToRust();
+
+                        // 2. Chờ 300ms rồi mới thực hiện lệnh gốc của trang web
+                        setTimeout(() => {{
+                            console.log(">> Tiếp tục đăng nhập...");
+                            originalPostBack(options);
+                        }}, 300);
+                    }};
+                    window.WebForm_DoPostBackWithOptions.isHooked = true;
+                    console.log(">> Đã móc nối thành công vào hệ thống đăng nhập");
+                }}
+            }}
+
+            // CHẠY LIÊN TỤC
             const observer = new MutationObserver(() => {{
                 autoFill();
-                setupCapture();
+                hookPostBack(); // Liên tục kiểm tra để móc hàm nếu trang web load lại AJAX
             }});
             observer.observe(document.body, {{ childList: true, subtree: true }});
             
-            // Chạy ngay lập tức
+            // Chạy ngay lần đầu
             autoFill();
-            setupCapture();
+            hookPostBack();
         }});
     "#, u_v, p_v, c_v, t_v);
 
@@ -266,7 +256,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
              let url_str = url.as_str();
              if url_str.starts_with("https://nsl.local/save/") {
                  let parts: Vec<&str> = url_str.split('/').collect();
-                 // Cấu trúc: /save/u/p/c/t
+                 // /save/u/p/c/t
                  if parts.len() >= 8 {
                      let u = String::from_utf8(general_purpose::STANDARD.decode(parts[4]).unwrap_or_default()).unwrap_or_default();
                      let p = String::from_utf8(general_purpose::STANDARD.decode(parts[5]).unwrap_or_default()).unwrap_or_default();
@@ -275,7 +265,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
                      
                      let _ = perform_save_account(&app_handle_clone, target_domain.clone(), u, p, c, t);
                  }
-                 return false;
+                 return false; // Chặn không cho chuyển trang
              }
              true
         })
