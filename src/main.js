@@ -3,26 +3,16 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { getVersion } from '@tauri-apps/api/app';
 
-// ==========================================
-// 1. SIDEBAR THÔNG MINH
-// ==========================================
+// --- UI Logic (Sidebar & Resize) ---
 window.toggleSidebar = async () => {
     const sb = document.getElementById('sidebar');
     const ic = document.getElementById('toggle-icon');
-    const isCollapsed = sb.classList.toggle('sidebar-collapsed');
+    const collapsed = sb.classList.toggle('sidebar-collapsed');
+    ic.style.transform = collapsed ? 'rotate(180deg)' : 'rotate(0deg)';
     
-    ic.style.transform = isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)';
-    
-    // KHI THU NHỎ -> ĐÓNG HẾT SUBMENU
-    if (isCollapsed) {
-        document.querySelectorAll('.submenu').forEach(s => {
-            s.classList.remove('open');
-            // Logic CSS đã handle việc display:none
-        });
-    }
+    if(collapsed) document.querySelectorAll('.submenu').forEach(s => s.classList.remove('open'));
 
-    // Resize Webview
-    try { await invoke('update_webview_layout', { sidebarWidth: isCollapsed ? 64.0 : 260.0 }); } catch (e) {}
+    try { await invoke('update_webview_layout', { sidebarWidth: collapsed ? 64.0 : 260.0 }); } catch (e) {}
 };
 
 window.addEventListener('resize', async () => {
@@ -31,26 +21,19 @@ window.addEventListener('resize', async () => {
     try { await invoke('update_webview_layout', { sidebarWidth: w }); } catch (e) {}
 });
 
-// ==========================================
-// 2. QUẢN LÝ VIEW (CHUYỂN TAB)
-// ==========================================
+// --- Navigation Logic ---
 function hideAllViews() {
-    document.getElementById('view-update').classList.remove('flex');
     document.getElementById('view-update').classList.add('hidden');
-    
-    document.getElementById('view-passwords').classList.remove('flex');
+    document.getElementById('view-update').classList.remove('flex');
     document.getElementById('view-passwords').classList.add('hidden');
+    document.getElementById('view-passwords').classList.remove('flex');
 }
 
-// -> TAB TRÌNH DUYỆT (QLTH / CSDL)
 window.loadExternalSystem = async (url, name, menuIdToUnlock) => {
-    hideAllViews(); // Ẩn các view HTML
+    hideAllViews();
     document.getElementById('page-title').innerText = name;
-    
-    // Mở Webview Rust
     await invoke('open_secure_window', { url: url });
     
-    // Mở Submenu tương ứng
     const sb = document.getElementById('sidebar');
     if (!sb.classList.contains('sidebar-collapsed')) {
         document.querySelectorAll('.submenu').forEach(s => s.classList.remove('open'));
@@ -61,11 +44,9 @@ window.loadExternalSystem = async (url, name, menuIdToUnlock) => {
 
 window.navigateRust = async (url) => { await invoke('navigate_webview', { url: url }); };
 
-// -> TAB CẬP NHẬT
 window.switchToUpdate = async () => {
-    await invoke('hide_embedded_view'); // ĐÓNG WEBVIEW RUST
+    await invoke('hide_embedded_view');
     hideAllViews();
-    
     const v = document.getElementById('view-update');
     v.classList.remove('hidden');
     v.classList.add('flex');
@@ -73,35 +54,27 @@ window.switchToUpdate = async () => {
     if(document.getElementById('auto-update-btn')) runOneClickUpdate();
 };
 
-// -> TAB QUẢN LÝ MẬT KHẨU (MỚI)
 window.switchToPasswordManager = async () => {
-    await invoke('hide_embedded_view'); // ĐÓNG WEBVIEW RUST
+    await invoke('hide_embedded_view');
     hideAllViews();
-    
     const v = document.getElementById('view-passwords');
     v.classList.remove('hidden');
-    v.classList.add('flex'); // Flex để dùng layout dọc
+    v.classList.add('flex');
     document.getElementById('page-title').innerText = "Quản lý Mật khẩu";
-    
-    loadPasswordTable(); // Tải dữ liệu
+    loadPasswordTable();
 };
 
-// ==========================================
-// 3. LOGIC BẢNG MẬT KHẨU (TABLE)
-// ==========================================
+// --- Password Manager Logic (Table) ---
 async function loadPasswordTable() {
     const tbody = document.getElementById('password-table-body');
     tbody.innerHTML = '<tr><td colspan="4" class="text-center text-slate-500 py-4">Đang tải...</td></tr>';
-    
     try {
-        const accounts = await invoke('get_all_accounts'); // Gọi Rust lấy list
+        const accounts = await invoke('get_all_accounts');
         tbody.innerHTML = '';
-        
         if (accounts.length === 0) {
             tbody.innerHTML = '<tr><td colspan="4" class="text-center text-slate-500 py-4">Chưa có dữ liệu</td></tr>';
             return;
         }
-
         accounts.forEach((acc, index) => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -109,25 +82,21 @@ async function loadPasswordTable() {
                 <td class="font-medium text-white">${acc.domain}</td>
                 <td class="text-cyan-300">${acc.username}</td>
                 <td class="flex justify-center gap-2">
-                    <button onclick="copyPass('${acc.domain}')" title="Copy Mật khẩu" class="p-1.5 bg-slate-700 hover:bg-slate-600 rounded text-green-400">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    <button onclick="copyPass('${acc.domain}')" title="Copy" class="p-1.5 bg-slate-700 hover:bg-slate-600 rounded text-green-400">
+                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                     </button>
-                    <button onclick="editAccount('${acc.domain}', '${acc.username}')" title="Chỉnh sửa" class="p-1.5 bg-slate-700 hover:bg-slate-600 rounded text-blue-400">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    <button onclick="editAccount('${acc.domain}', '${acc.username}')" title="Sửa" class="p-1.5 bg-slate-700 hover:bg-slate-600 rounded text-blue-400">
+                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                     </button>
                     <button onclick="deleteAccount('${acc.domain}')" title="Xóa" class="p-1.5 bg-slate-700 hover:bg-red-900/50 rounded text-red-400">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
-                </td>
-            `;
+                </td>`;
             tbody.appendChild(tr);
         });
-    } catch (e) {
-        alert("Lỗi tải dữ liệu: " + e);
-    }
+    } catch (e) { alert("Lỗi tải: " + e); }
 }
 
-// Hành động: Copy Pass
 window.copyPass = async (domain) => {
     try {
         const pass = await invoke('get_password_plaintext', { domain });
@@ -136,25 +105,16 @@ window.copyPass = async (domain) => {
     } catch (e) { alert("Lỗi: " + e); }
 };
 
-// Hành động: Xóa
 window.deleteAccount = async (domain) => {
-    if(confirm(`Bạn chắc chắn muốn xóa tài khoản của ${domain}?`)) {
-        try {
-            await invoke('delete_account', { domain });
-            loadPasswordTable(); // Reload bảng
-        } catch(e) { alert("Lỗi: " + e); }
+    if(confirm(`Xóa tài khoản ${domain}?`)) {
+        try { await invoke('delete_account', { domain }); loadPasswordTable(); } catch(e) { alert("Lỗi: " + e); }
     }
 };
 
-// Hành động: Sửa / Thêm
 window.openEditModal = () => openModal("", "", "");
-window.editAccount = async (domain, user) => {
-    // Để edit, ta cần lấy pass cũ giải mã ra để điền vào ô input (hoặc để trống nếu ko muốn đổi)
-    // Ở đây ta cứ lấy pass ra hiển thị cho tiện
-    try {
-        const pass = await invoke('get_password_plaintext', { domain });
-        openModal(domain, user, pass);
-    } catch(e) { openModal(domain, user, ""); }
+window.editAccount = async (d, u) => {
+    try { const p = await invoke('get_password_plaintext', { domain: d }); openModal(d, u, p); } 
+    catch(e) { openModal(d, u, ""); }
 };
 
 function openModal(d, u, p) {
@@ -162,7 +122,6 @@ function openModal(d, u, p) {
     document.getElementById('cfg-domain').value = d;
     document.getElementById('cfg-user').value = u;
     document.getElementById('cfg-pass').value = p;
-    // Nếu đang sửa thì disable domain (vì nó là Key) - Hoặc cho sửa thoải mái cũng đc
     document.getElementById('cfg-domain').readOnly = (d !== ""); 
 }
 
@@ -170,45 +129,120 @@ window.saveConfigToRust = async () => {
     const d = document.getElementById('cfg-domain').value;
     const u = document.getElementById('cfg-user').value;
     const p = document.getElementById('cfg-pass').value;
-    if(!d || !u || !p) { alert("Vui lòng nhập đủ thông tin"); return; }
-    
-    try {
-        await invoke('save_account', { domain:d, user:u, pass:p });
-        document.getElementById('config-modal').classList.add('hidden');
-        loadPasswordTable(); // Refresh bảng
-    } catch(e) { alert("Lỗi: " + e); }
+    if(!d || !u || !p) return alert("Thiếu thông tin");
+    try { await invoke('save_account', { domain:d, user:u, pass:p }); document.getElementById('config-modal').classList.add('hidden'); loadPasswordTable(); } 
+    catch(e) { alert("Lỗi: " + e); }
 };
 
-// --- AUTO UPDATE & INIT (Giữ nguyên) ---
+// --- UPDATE LOGIC (FIX LỖI HIỂN THỊ) ---
+const logEl = document.getElementById('update-log');
+const btnCheck = document.getElementById('auto-update-btn');
+const btnText = document.getElementById('btn-text');
+const loadingIcon = document.getElementById('loading-icon');
+const progressBar = document.getElementById('progress-bar');
+const statusText = document.getElementById('status-text');
+
+function log(msg, type = 'info') {
+    if (!logEl) return;
+    const div = document.createElement('div');
+    const time = new Date().toLocaleTimeString('vi-VN');
+    div.innerHTML = `<span class="opacity-50">[${time}]</span> ${msg}`;
+    if (type === 'error') div.className = "text-red-400";
+    if (type === 'success') div.className = "text-green-400 font-bold";
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
 async function initSystem() {
   try {
       const v = await getVersion();
       const vd = document.getElementById('current-version-display');
       if(vd) vd.innerText = `v${v}`;
-      switchToUpdate(); // Mặc định vào trang update
+      
+      // Mặc định vào trang update để chạy auto check
+      switchToUpdate();
   } catch (e) {}
 }
-// (Các hàm update cũ giữ nguyên, copy lại từ bản trước hoặc để tôi viết lại ngắn gọn)
-const btnCheck = document.getElementById('auto-update-btn');
-const statusText = document.getElementById('btn-text'); // Sửa lại trỏ đúng ID
+
 async function runOneClickUpdate() {
     if(!btnCheck) return;
     btnCheck.disabled = true;
-    if(statusText) statusText.innerText = "Đang kiểm tra...";
+    loadingIcon.classList.remove('hidden');
+    btnText.innerText = "Đang kiểm tra...";
+    if(statusText) {
+        statusText.innerText = "Đang kết nối...";
+        statusText.className = "text-yellow-400 font-medium animate-pulse";
+    }
+    
+    // Xóa log cũ
+    if(logEl) logEl.innerHTML = '';
+    
+    log(">> [AUTO] Bắt đầu quy trình cập nhật...");
+    log(">> Đang kết nối máy chủ GitHub...");
+
     try {
         const update = await check();
         if (update) {
-            statusText.innerText = "Đang tải...";
-            await update.downloadAndInstall();
-            await relaunch();
+            log(`>> [PHÁT HIỆN] Bản mới: v${update.version}`, 'success');
+            if(statusText) statusText.innerText = "Đang tải xuống...";
+            btnText.innerText = "Đang tải...";
+            await installUpdate(update);
         } else {
-            statusText.innerText = "Đã cập nhật mới nhất";
-            setTimeout(() => { btnCheck.disabled = false; statusText.innerText = "Kiểm tra lại"; }, 2000);
+            // FIX LỖI: Thêm dòng log này để màn hình không bị trống
+            log(">> [INFO] Bạn đang dùng phiên bản mới nhất.", 'success');
+            log(">> Không có bản cập nhật nào.", 'info');
+            
+            if(statusText) {
+                statusText.innerText = "Hệ thống đã cập nhật";
+                statusText.className = "text-green-400 font-bold";
+            }
+            resetButtonState("Kiểm tra lại");
         }
-    } catch (e) {
-        statusText.innerText = "Lỗi kết nối";
-        btnCheck.disabled = false;
+    } catch (error) {
+        log(`>> [LỖI] ${error}`, 'error');
+        if(statusText) {
+            statusText.innerText = "Lỗi kết nối";
+            statusText.className = "text-red-400 font-bold";
+        }
+        resetButtonState("Thử lại");
     }
+}
+
+async function installUpdate(update) {
+    document.getElementById('progress-container').classList.remove('hidden');
+    let downloaded = 0; let contentLength = 0;
+    try {
+        await update.downloadAndInstall((event) => {
+            if (event.event === 'Started') {
+                contentLength = event.data.contentLength;
+                log(">> Bắt đầu tải gói tin...");
+            } else if (event.event === 'Progress') {
+                downloaded += event.data.chunkLength;
+                if (contentLength) {
+                    const percent = (downloaded / contentLength) * 100;
+                    progressBar.style.width = `${percent}%`;
+                    btnText.innerText = `Đang tải ${Math.round(percent)}%`;
+                }
+            } else if (event.event === 'Finished') {
+                progressBar.style.width = '100%';
+                log(">> Tải xong. Đang giải nén...", 'success');
+            }
+        });
+        statusText.innerText = "Hoàn tất! Khởi động lại...";
+        await new Promise(r => setTimeout(r, 1500));
+        await relaunch();
+    } catch (e) {
+        log(`>> [LỖI] ${e}`, 'error');
+        resetButtonState("Thử lại");
+    }
+}
+
+function resetButtonState(text) {
+    if(!btnCheck) return;
+    btnCheck.disabled = false;
+    loadingIcon.classList.add('hidden');
+    btnText.innerText = text;
+    btnCheck.onclick = async () => await runOneClickUpdate();
 }
 
 initSystem();
