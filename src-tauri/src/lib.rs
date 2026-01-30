@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-// Sử dụng WebviewWindowBuilder thay vì WebviewBuilder
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, LogicalPosition, LogicalSize, Url};
 use magic_crypt::{new_magic_crypt, MagicCryptTrait};
 use serde::{Deserialize, Serialize};
@@ -57,10 +56,9 @@ fn save_account(app: AppHandle, domain: String, user: String, pass: String) -> R
     perform_save_account(&app, domain, user, pass)
 }
 
-// --- LỆNH 1: CẬP NHẬT KÍCH THƯỚC (Dùng set_position/set_size thay vì set_bounds) ---
+// --- LỆNH 1: CẬP NHẬT KÍCH THƯỚC ---
 #[tauri::command]
 fn update_webview_layout(app: AppHandle, sidebar_width: f64) {
-    // Lấy cửa sổ con "embedded_browser"
     if let Some(win) = app.get_webview_window("embedded_browser") {
         if let Some(main_window) = app.get_webview_window("main") {
             let size = main_window.inner_size().unwrap();
@@ -74,7 +72,6 @@ fn update_webview_layout(app: AppHandle, sidebar_width: f64) {
             let webview_w = total_width - sidebar_width;
             let webview_h = total_height - header_height;
 
-            // Cập nhật vị trí và kích thước riêng lẻ (API ổn định hơn)
             let _ = win.set_position(LogicalPosition::new(webview_x, webview_y));
             let _ = win.set_size(LogicalSize::new(webview_w, webview_h));
         }
@@ -85,21 +82,20 @@ fn update_webview_layout(app: AppHandle, sidebar_width: f64) {
 #[tauri::command]
 async fn navigate_webview(app: AppHandle, url: String) {
     if let Some(win) = app.get_webview_window("embedded_browser") {
-        // WebviewWindow cũng có thể eval JS
         let script = format!("window.location.replace('{}')", url);
         let _ = win.eval(&script);
     }
 }
 
-// --- LỆNH 3: ẨN WEBVIEW ---
+// --- LỆNH 3: ẨN CỬA SỔ CON ---
 #[tauri::command]
 fn hide_embedded_view(app: AppHandle) {
     if let Some(win) = app.get_webview_window("embedded_browser") {
-        let _ = win.close(); // Đóng hẳn để tiết kiệm RAM
+        let _ = win.close(); 
     }
 }
 
-// --- LỆNH 4: MỞ CỬA SỔ CON (LỒNG GHÉP) ---
+// --- LỆNH 4: MỞ CỬA SỔ CON "LỒNG GHÉP" ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -185,7 +181,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
     let main_window = app.get_webview_window("main").unwrap();
     let size = main_window.inner_size().unwrap();
     
-    // Tính toán kích thước ban đầu (Sidebar = 260px)
+    // Tính toán kích thước ban đầu
     let webview_x = 260.0;
     let webview_y = 64.0;
     let webview_w = (size.width as f64) - webview_x;
@@ -194,16 +190,18 @@ async fn open_secure_window(app: AppHandle, url: String) {
     let app_handle_clone = app.clone();
     let domain_clone = domain.clone();
 
-    // SỬ DỤNG WebviewWindowBuilder (CỬA SỔ CON) - API ỔN ĐỊNH
+    // SỬ DỤNG WebviewWindowBuilder - ĐÃ FIX LỖI BUILD
     let _ = WebviewWindowBuilder::new(&app, "embedded_browser", WebviewUrl::External(url.parse().unwrap()))
         .title("Embedded Browser")
-        .decorations(false)    // Không viền
-        .skip_taskbar(true)    // Không hiện dưới taskbar
-        .parent(&main_window)  // Gắn chặt vào cửa sổ cha (Lồng ghép)
+        .decorations(false)
+        .skip_taskbar(true)
+        .resizable(false)
+        .parent(&main_window).unwrap() // <--- FIX 1: Thêm .unwrap() vào đây
         .inner_size(webview_w, webview_h)
         .position(webview_x, webview_y)
         .initialization_script(&init_script)
-        .on_navigation(move |url| {
+        // FIX 2: Thêm kiểu dữ liệu : &Url cho biến url
+        .on_navigation(move |url: &Url| {
              let url_str = url.as_str();
              if url_str.starts_with("https://nsl.local/save/") {
                  let parts: Vec<&str> = url_str.split('/').collect();

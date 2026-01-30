@@ -3,58 +3,30 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { getVersion } from '@tauri-apps/api/app';
 
-// ==========================================
-// 1. LOGIC GIAO DIỆN & SIDEBAR
-// ==========================================
-
-// Hàm thu/phóng Sidebar
+// --- UI Logic ---
 window.toggleSidebar = async () => {
-    const sidebar = document.getElementById('sidebar');
-    const toggleIcon = document.getElementById('toggle-icon');
+    const sb = document.getElementById('sidebar');
+    const ic = document.getElementById('toggle-icon');
+    const collapsed = sb.classList.toggle('sidebar-collapsed');
+    ic.style.transform = collapsed ? 'rotate(180deg)' : 'rotate(0deg)';
     
-    // Toggle class CSS
-    const isCollapsed = sidebar.classList.toggle('sidebar-collapsed');
-    
-    // Xoay icon
-    toggleIcon.style.transform = isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)';
-
-    // Tính toán độ rộng mới (64px hoặc 260px)
-    const newWidth = isCollapsed ? 64.0 : 260.0;
-    
-    // Gọi Rust để resize cái Webview bên cạnh
-    try { 
-        await invoke('update_webview_layout', { sidebarWidth: newWidth }); 
-    } catch (e) {
-        console.error("Resize error:", e);
-    }
+    // Gọi Rust resize
+    try { await invoke('update_webview_layout', { sidebarWidth: collapsed ? 64.0 : 260.0 }); } catch (e) {}
 };
 
-// Lắng nghe sự kiện resize cửa sổ chính để cập nhật lại layout
 window.addEventListener('resize', async () => {
-    const sidebar = document.getElementById('sidebar');
-    const currentWidth = sidebar.classList.contains('sidebar-collapsed') ? 64.0 : 260.0;
-    try { 
-        await invoke('update_webview_layout', { sidebarWidth: currentWidth }); 
-    } catch (e) {}
+    const sb = document.getElementById('sidebar');
+    const w = sb.classList.contains('sidebar-collapsed') ? 64.0 : 260.0;
+    try { await invoke('update_webview_layout', { sidebarWidth: w }); } catch (e) {}
 });
 
-// ==========================================
-// 2. LOGIC ĐIỀU HƯỚNG WEB (CHILD WEBVIEW)
-// ==========================================
-
-// Khi bấm vào menu cha (Mở trang web mới)
 window.loadExternalSystem = async (url, name, menuIdToUnlock) => {
-    // 1. Ẩn màn hình update đi
     document.getElementById('view-update').classList.add('hidden');
     document.getElementById('view-update').classList.remove('flex');
-    
-    // 2. Đổi tiêu đề header
     document.getElementById('page-title').innerText = name;
-
-    // 3. Gọi Rust để tạo/load Webview con
+    
     await invoke('open_secure_window', { url: url });
-
-    // 4. Mở menu con tương ứng (Accordion)
+    
     document.querySelectorAll('.submenu').forEach(s => {
         s.classList.remove('open');
         s.classList.add('menu-disabled');
@@ -66,60 +38,35 @@ window.loadExternalSystem = async (url, name, menuIdToUnlock) => {
     }
 };
 
-// Khi bấm vào menu con (Điều hướng trong webview đang mở)
 window.navigateRust = async (url) => {
     await invoke('navigate_webview', { url: url });
 };
 
-// ==========================================
-// 3. LOGIC CẬP NHẬT & CONFIG
-// ==========================================
-
-// Chuyển sang màn hình Update (Ẩn Webview con đi)
 window.switchToUpdate = async () => {
     await invoke('hide_embedded_view');
     const v = document.getElementById('view-update');
     v.classList.remove('hidden');
     v.classList.add('flex');
     document.getElementById('page-title').innerText = "Trung tâm cập nhật";
-    
-    // Nếu chưa chạy update, chạy luôn
     if(document.getElementById('auto-update-btn')) runOneClickUpdate();
 };
 
-// Mở Modal Config
-window.openConfigModal = () => {
-    document.getElementById('config-modal').classList.remove('hidden');
-    // Clear input cho an toàn
-    document.getElementById('cfg-user').value = '';
-    document.getElementById('cfg-pass').value = '';
-};
-
-// Lưu Config xuống Rust
+window.openConfigModal = () => document.getElementById('config-modal').classList.remove('hidden');
 window.saveConfigToRust = async () => {
     const d = document.getElementById('cfg-domain').value;
     const u = document.getElementById('cfg-user').value;
     const p = document.getElementById('cfg-pass').value;
-    
-    try {
-        const res = await invoke('save_account', { domain:d, user:u, pass:p });
-        alert(res);
-        document.getElementById('config-modal').classList.add('hidden');
-    } catch(e) {
-        alert("Lỗi: " + e);
-    }
+    const res = await invoke('save_account', { domain:d, user:u, pass:p });
+    alert(res);
+    document.getElementById('config-modal').classList.add('hidden');
 };
 
-// ==========================================
-// 4. AUTO UPDATE SYSTEM
-// ==========================================
-
+// --- UPDATE LOGIC ---
 const logEl = document.getElementById('update-log');
 const btnCheck = document.getElementById('auto-update-btn');
 const btnText = document.getElementById('btn-text');
 const loadingIcon = document.getElementById('loading-icon');
 const progressBar = document.getElementById('progress-bar');
-const progressContainer = document.getElementById('progress-container');
 const statusText = document.getElementById('status-text');
 
 function log(msg, type = 'info') {
@@ -135,21 +82,13 @@ function log(msg, type = 'info') {
 
 async function initSystem() {
   try {
-      const version = await getVersion();
-      const verDisplay = document.getElementById('current-version-display');
-      if(verDisplay) verDisplay.innerText = `v${version}`;
-      
-      // Mặc định vào màn hình Update
+      const v = await getVersion();
+      const vd = document.getElementById('current-version-display');
+      if(vd) vd.innerText = `v${v}`;
       switchToUpdate();
-
       if(btnCheck) btnCheck.onclick = async () => await runOneClickUpdate();
-
-      setTimeout(() => {
-          runOneClickUpdate();
-      }, 1000);
-  } catch (e) {
-      console.error(e);
-  }
+      setTimeout(runOneClickUpdate, 1000);
+  } catch (e) { console.error(e); }
 }
 
 async function runOneClickUpdate() {
@@ -158,9 +97,7 @@ async function runOneClickUpdate() {
     loadingIcon.classList.remove('hidden');
     btnText.innerText = "Đang kiểm tra...";
     if(statusText) statusText.innerText = "Đang kết nối...";
-    progressContainer.classList.add('hidden');
     if(logEl) logEl.innerHTML = '';
-    
     log(">> [AUTO] Bắt đầu quy trình cập nhật...");
 
     try {
@@ -182,7 +119,7 @@ async function runOneClickUpdate() {
 }
 
 async function installUpdate(update) {
-    progressContainer.classList.remove('hidden');
+    document.getElementById('progress-container').classList.remove('hidden');
     let downloaded = 0; let contentLength = 0;
     try {
         await update.downloadAndInstall((event) => {
@@ -216,5 +153,4 @@ function resetButtonState(text) {
     btnCheck.onclick = async () => await runOneClickUpdate();
 }
 
-// Khởi chạy App
 initSystem();
