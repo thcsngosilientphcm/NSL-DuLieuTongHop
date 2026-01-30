@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewBuilder, LogicalPosition, LogicalSize};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewBuilder, LogicalPosition, LogicalSize, Url}; // Thêm Url
 use magic_crypt::{new_magic_crypt, MagicCryptTrait};
 use serde::{Deserialize, Serialize};
 use base64::{engine::general_purpose, Engine as _};
@@ -63,7 +63,7 @@ fn update_webview_layout(app: AppHandle, sidebar_width: f64) {
     if let Some(view) = app.get_webview("embedded_browser") {
         if let Some(main_window) = app.get_webview_window("main") {
             let size = main_window.inner_size().unwrap();
-            let header_height = 64.0; // Chiều cao Header cố định
+            let header_height = 64.0;
             
             let total_width = size.width as f64;
             let total_height = size.height as f64;
@@ -81,11 +81,13 @@ fn update_webview_layout(app: AppHandle, sidebar_width: f64) {
     }
 }
 
-// --- LỆNH 2: ĐIỀU HƯỚNG ---
+// --- LỆNH 2: ĐIỀU HƯỚNG (FIX LỖI load_url) ---
 #[tauri::command]
 async fn navigate_webview(app: AppHandle, url: String) {
     if let Some(view) = app.get_webview("embedded_browser") {
-        let _ = view.load_url(url.parse().unwrap());
+        // Dùng eval JS để điều hướng thay vì load_url (tránh lỗi API thay đổi)
+        let script = format!("window.location.replace('{}')", url);
+        let _ = view.eval(&script);
     }
 }
 
@@ -93,11 +95,12 @@ async fn navigate_webview(app: AppHandle, url: String) {
 #[tauri::command]
 fn hide_embedded_view(app: AppHandle) {
     if let Some(view) = app.get_webview("embedded_browser") {
-        let _ = view.hide();
+        // Có thể dùng close() hoặc hide(). Hide sẽ giữ trạng thái web.
+        let _ = view.close(); 
     }
 }
 
-// --- LỆNH 4: MỞ WEBVIEW LỒNG GHÉP (AUTO FILL/CAPTURE) ---
+// --- LỆNH 4: MỞ WEBVIEW LỒNG GHÉP (FIX LỖI BOUNDS & TYPE) ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -184,24 +187,15 @@ async fn open_secure_window(app: AppHandle, url: String) {
     }
 
     let main_window = app.get_webview_window("main").unwrap();
-    let size = main_window.inner_size().unwrap();
-    
-    // Mặc định Sidebar mở (260px)
-    let webview_x = 260.0;
-    let webview_y = 64.0;
-    let webview_w = (size.width as f64) - webview_x;
-    let webview_h = (size.height as f64) - webview_y;
-
     let app_handle_clone = app.clone();
     let domain_clone = domain.clone();
 
-    let _webview = WebviewBuilder::new("embedded_browser", WebviewUrl::External(url.parse().unwrap()))
-        .bounds(tauri::Rect {
-            position: LogicalPosition::new(webview_x, webview_y).into(),
-            size: LogicalSize::new(webview_w, webview_h).into(),
-        })
+    // 1. TẠO WEBVIEW (Không set bounds ở đây để tránh lỗi)
+    let webview = WebviewBuilder::new("embedded_browser", WebviewUrl::External(url.parse().unwrap()))
+        .auto_resize()
         .initialization_script(&init_script)
-        .on_navigation(move |url| {
+        // FIX LỖI TYPE: Thêm kiểu dữ liệu cho biến url
+        .on_navigation(move |url: &Url| {
              let url_str = url.as_str();
              if url_str.starts_with("https://nsl.local/save/") {
                  let parts: Vec<&str> = url_str.split('/').collect();
@@ -216,7 +210,22 @@ async fn open_secure_window(app: AppHandle, url: String) {
              }
              true
         })
-        .build(&main_window);
+        .build(&main_window); // Tạo xong webview
+
+    // 2. SET BOUNDS SAU KHI TẠO (FIX LỖI BOUNDS)
+    if let Ok(view) = webview {
+        let size = main_window.inner_size().unwrap();
+        
+        let webview_x = 260.0;
+        let webview_y = 64.0;
+        let webview_w = (size.width as f64) - webview_x;
+        let webview_h = (size.height as f64) - webview_y;
+        
+        let _ = view.set_bounds(tauri::Rect {
+            position: LogicalPosition::new(webview_x, webview_y).into(),
+            size: LogicalSize::new(webview_w, webview_h).into(),
+        });
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
