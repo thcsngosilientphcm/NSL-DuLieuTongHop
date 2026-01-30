@@ -20,7 +20,7 @@ struct AccountDTO {
 
 const SECRET_KEY: &str = "NSL_SECURE_KEY_2026_HCM"; 
 
-// --- CÁC HÀM HELPER (QUAN TRỌNG: PHẢI NẰM Ở ĐÂY) ---
+// --- CÁC HÀM HELPER ---
 
 fn get_creds_path(app: &AppHandle) -> PathBuf {
     app.path().app_data_dir().unwrap().join("creds.json")
@@ -44,12 +44,11 @@ fn save_store(app: &AppHandle, store: &AccountStore) -> Result<(), String> {
     Ok(())
 }
 
-// Hàm này bị thiếu ở lần trước -> Gây ra lỗi
 fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: String) -> Result<String, String> {
     let mut store = load_store(app);
     let mc = new_magic_crypt!(SECRET_KEY, 256);
     
-    // Kiểm tra trùng lặp (nếu user & pass y hệt thì không lưu đè để đỡ tốn I/O)
+    // Kiểm tra trùng lặp: Nếu User và Pass y hệt cũ thì không lưu lại (để tránh ghi file nhiều lần)
     if let Some((stored_user, stored_pass_enc)) = store.accounts.get(&domain) {
         if stored_user == &user {
             if let Ok(stored_pass_dec) = mc.decrypt_base64_to_string(stored_pass_enc) {
@@ -66,7 +65,7 @@ fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: Str
     Ok("Đã lưu thành công!".to_string())
 }
 
-// --- CÁC COMMAND GỌI TỪ JAVASCRIPT ---
+// --- CÁC COMMAND (Giao tiếp với JS) ---
 
 #[tauri::command]
 fn get_all_accounts(app: AppHandle) -> Vec<AccountDTO> {
@@ -112,12 +111,8 @@ fn update_webview_layout(app: AppHandle, sidebar_width: f64) {
         if let Some(main_window) = app.get_webview_window("main") {
             let size = main_window.inner_size().unwrap();
             let header_height = 64.0;
-            
             let _ = win.set_position(LogicalPosition::new(sidebar_width, header_height));
-            let _ = win.set_size(LogicalSize::new(
-                (size.width as f64) - sidebar_width, 
-                (size.height as f64) - header_height
-            ));
+            let _ = win.set_size(LogicalSize::new((size.width as f64) - sidebar_width, (size.height as f64) - header_height));
         }
     }
 }
@@ -137,12 +132,13 @@ async fn navigate_webview(app: AppHandle, url: String) {
     }
 }
 
+// --- LOGIC MỞ CỬA SỔ VÀ TIÊM SCRIPT THÔNG MINH ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
+    // 1. Phân tích domain để lấy mật khẩu đã lưu
     let domain_raw = url.replace("https://", "").replace("http://", "");
     let domain = domain_raw.split('/').next().unwrap_or("").to_string();
     
-    // Lấy pass đã lưu để auto-fill
     let store = load_store(&app);
     let mut username = String::new();
     let mut password = String::new();
@@ -155,54 +151,100 @@ async fn open_secure_window(app: AppHandle, url: String) {
         }
     }
 
+    // --- SCRIPT QUAN SÁT VÀ TỰ ĐỘNG ĐIỀN (Dùng MutationObserver) ---
+    // Script này sử dụng đúng ID của trang QLTH: ContentPlaceHolder1_tbU (User), ContentPlaceHolder1_tbP (Pass), ContentPlaceHolder1_btOK (Button)
     let init_script = format!(r#"
         window.addEventListener('DOMContentLoaded', () => {{
-            function autoClickTab() {{
+            console.log("🔥 NSL Auto-Fill v5: Targeting QLTH IDs");
+            const targetUser = "{}";
+            const targetPass = "{}";
+
+            // HÀM 1: LIÊN TỤC QUAN SÁT VÀ ĐIỀN
+            function checkAndFill() {{
+                // A. Tự Click Tab
                 let spans = document.querySelectorAll('.rtsTxt');
                 for (let span of spans) {{
                     if (span.innerText.trim() === "Tài khoản QLTH") {{
                         let link = span.closest('a.rtsLink');
-                        if (link) link.click(); return;
+                        // Chỉ click nếu chưa được chọn (tránh reload trang liên tục)
+                        if (link && !link.classList.contains('rtsSelected')) {{
+                            console.log(">> Đã click Tab QLTH");
+                            link.click();
+                        }}
+                        break; 
+                    }}
+                }}
+
+                // B. Tự Điền Mật Khẩu (Dùng đúng ID)
+                if (targetUser) {{
+                    let uInput = document.getElementById('ContentPlaceHolder1_tbU') || document.querySelector('input[name$="tbU"]');
+                    let pInput = document.getElementById('ContentPlaceHolder1_tbP') || document.querySelector('input[name$="tbP"]');
+
+                    if (uInput && pInput) {{
+                        // Chỉ điền khi ô đang trống
+                        if (uInput.value !== targetUser) {{
+                            console.log(">> Đã tìm thấy ô nhập liệu -> Đang điền...");
+                            uInput.value = targetUser;
+                            pInput.value = targetPass;
+                            
+                            // Bắn sự kiện để ASP.NET biết đã có dữ liệu (Rất quan trọng)
+                            uInput.dispatchEvent(new Event('input', {{bubbles:true}}));
+                            uInput.dispatchEvent(new Event('change', {{bubbles:true}}));
+                            pInput.dispatchEvent(new Event('input', {{bubbles:true}}));
+                            pInput.dispatchEvent(new Event('change', {{bubbles:true}}));
+                        }}
                     }}
                 }}
             }}
-            function autoFill() {{
-                const u = "{}"; const p = "{}";
-                if(u) {{
-                    let ui = document.querySelector('input[name*="UserName"]') || document.querySelector('input[id*="user"]');
-                    let pi = document.querySelector('input[name*="Password"]') || document.querySelector('input[id*="pass"]');
-                    if(ui && pi && !ui.value) {{
-                        ui.value = u; pi.value = p;
-                        ui.dispatchEvent(new Event('input', {{bubbles:true}}));
-                        pi.dispatchEvent(new Event('input', {{bubbles:true}}));
-                        let cap = document.querySelector('input[name*="Captcha"]');
-                        if(cap) cap.focus();
-                    }}
-                }}
-            }}
-            // Logic bắt mật khẩu mới
+
+            // HÀM 2: BẮT SỰ KIỆN ĐĂNG NHẬP (Dùng Iframe ẩn để không chặn Login)
             function setupCapture() {{
                 function sendToRust() {{
-                    let ui = document.querySelector('input[name*="UserName"]') || document.querySelector('input[id*="user"]');
-                    let pi = document.querySelector('input[name*="Password"]') || document.querySelector('input[id*="pass"]');
-                    if (ui && pi && ui.value && pi.value) {{
-                        let u64 = btoa(unescape(encodeURIComponent(ui.value)));
-                        let p64 = btoa(unescape(encodeURIComponent(pi.value)));
-                        window.location.replace("https://nsl.local/save/" + u64 + "/" + p64);
+                    let uInput = document.getElementById('ContentPlaceHolder1_tbU');
+                    let pInput = document.getElementById('ContentPlaceHolder1_tbP');
+                    
+                    if (uInput && pInput && uInput.value && pInput.value) {{
+                        let u64 = btoa(unescape(encodeURIComponent(uInput.value)));
+                        let p64 = btoa(unescape(encodeURIComponent(pInput.value)));
+                        
+                        // KỸ THUẬT IFRAME: Gửi tin ngầm, không làm chuyển trang chính
+                        let iframe = document.createElement('iframe');
+                        iframe.style.display = 'none';
+                        iframe.src = "https://nsl.local/save/" + u64 + "/" + p64;
+                        document.body.appendChild(iframe);
+                        
+                        // Xóa iframe sau 1 giây
+                        setTimeout(() => document.body.removeChild(iframe), 1000);
                     }}
                 }}
-                document.addEventListener('keydown', (e) => {{ if (e.key === 'Enter') sendToRust(); }});
-                document.addEventListener('click', (e) => {{
-                    let t = e.target;
-                    while (t && t !== document) {{
-                        if (t.type === 'submit' || t.innerText.toLowerCase().includes('đăng nhập')) {{ sendToRust(); break; }}
-                        t = t.parentElement;
-                    }}
-                }});
+
+                // Gắn sự kiện vào ô Mật khẩu (Enter)
+                let pInput = document.getElementById('ContentPlaceHolder1_tbP');
+                if (pInput && !pInput.hasAttribute('data-captured')) {{
+                    pInput.setAttribute('data-captured', 'true');
+                    pInput.addEventListener('keydown', (e) => {{ if(e.key==='Enter') sendToRust(); }});
+                }}
+
+                // Gắn sự kiện vào Nút Đăng nhập (ID chuẩn: ContentPlaceHolder1_btOK)
+                let btn = document.getElementById('ContentPlaceHolder1_btOK');
+                if (btn && !btn.hasAttribute('data-captured')) {{
+                    btn.setAttribute('data-captured', 'true');
+                    // Dùng mousedown để bắt sớm hơn onclick của ASP.NET
+                    btn.addEventListener('mousedown', () => sendToRust()); 
+                }}
             }}
-            setTimeout(autoClickTab, 500);
-            setTimeout(autoFill, 800);
-            setupCapture();
+
+            // SỬ DỤNG MUTATION OBSERVER ĐỂ CANH CHỪNG 24/7
+            // Bất cứ khi nào trang web hiện ra ô nhập liệu, nó sẽ điền ngay lập tức
+            const observer = new MutationObserver((mutations) => {{
+                checkAndFill();
+                setupCapture();
+            }});
+            
+            observer.observe(document.body, {{ childList: true, subtree: true }});
+            
+            // Chạy ngay lần đầu
+            checkAndFill();
         }});
     "#, username, password);
 
@@ -211,14 +253,13 @@ async fn open_secure_window(app: AppHandle, url: String) {
     let main_window = app.get_webview_window("main").unwrap();
     let size = main_window.inner_size().unwrap();
     
-    // Mặc định sidebar mở (260px)
     let webview_x = 260.0;
     let webview_y = 64.0;
     let webview_w = (size.width as f64) - webview_x;
     let webview_h = (size.height as f64) - webview_y;
-    
     let app_handle_clone = app.clone();
-    
+    let target_domain = domain.clone();
+
     let _ = WebviewWindowBuilder::new(&app, "embedded_browser", WebviewUrl::External(url.parse().unwrap()))
         .title("Browser")
         .decorations(false)
@@ -230,23 +271,23 @@ async fn open_secure_window(app: AppHandle, url: String) {
         .initialization_script(&init_script)
         .on_navigation(move |url: &Url| {
              let url_str = url.as_str();
+             // BẮT LINK ẢO TỪ IFRAME
              if url_str.starts_with("https://nsl.local/save/") {
                  let parts: Vec<&str> = url_str.split('/').collect();
                  if parts.len() >= 6 {
                      let u_res = general_purpose::STANDARD.decode(parts[4]);
                      let p_res = general_purpose::STANDARD.decode(parts[5]);
                      if let (Ok(u), Ok(p)) = (u_res, p_res) {
-                         // Dùng domain ảo tạm thời để test logic save, hoặc parse từ url gốc
-                         // Ở đây ta gọi hàm perform_save_account mà trước đó bị lỗi thiếu
+                         // Lưu với domain chính xác
                          let _ = perform_save_account(
                              &app_handle_clone, 
-                             "detected_login".to_string(), // Tạm thời dùng key này hoặc cần logic lấy domain
+                             target_domain.clone(), 
                              String::from_utf8(u).unwrap(), 
                              String::from_utf8(p).unwrap()
                          );
                      }
                  }
-                 return false;
+                 return false; // Chặn iframe, không ảnh hưởng trang chính
              }
              true
         })
@@ -261,14 +302,8 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
-            save_account, 
-            get_all_accounts, 
-            get_password_plaintext, 
-            delete_account,
-            open_secure_window, 
-            navigate_webview, 
-            hide_embedded_view, 
-            update_webview_layout
+            save_account, get_all_accounts, get_password_plaintext, delete_account,
+            open_secure_window, navigate_webview, hide_embedded_view, update_webview_layout
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
