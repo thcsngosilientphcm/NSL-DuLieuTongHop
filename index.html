@@ -9,49 +9,27 @@
       body { background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); }
       .no-select { -webkit-user-select: none; user-select: none; cursor: default; }
 
-      /* SIDEBAR LOGIC */
-      .fixed-sidebar {
-        width: 260px;
-        flex-shrink: 0;
-        transition: width 0.3s ease;
-        z-index: 50;
-      }
+      /* SIDEBAR */
+      .fixed-sidebar { width: 260px; flex-shrink: 0; transition: width 0.3s ease; z-index: 50; }
       .sidebar-collapsed { width: 64px !important; }
-      
-      .sidebar-collapsed .sidebar-text, 
-      .sidebar-collapsed .menu-arrow { display: none; }
+      .sidebar-collapsed .sidebar-text, .sidebar-collapsed .menu-arrow { display: none; }
       .sidebar-collapsed .submenu { display: none !important; }
-      
       .sidebar-collapsed .logo-box { justify-content: center; margin: 0 auto; }
       .sidebar-collapsed #toggle-icon { transform: rotate(180deg); }
-      
-      .sidebar-collapsed .menu-group button { justify-content: center; padding-left: 0; padding-right: 0; }
+      .sidebar-collapsed .menu-group button { justify-content: center; padding: 0; }
       .sidebar-collapsed .menu-group button div { justify-content: center; }
 
-      /* --- FIX LỖI CSS: Thêm -webkit- để hỗ trợ Safari --- */
-      .glass-sidebar { 
-        background: rgba(255, 255, 255, 0.05); 
-        -webkit-backdrop-filter: blur(10px); /* Fix cho Safari */
-        backdrop-filter: blur(10px); 
-        border-right: 1px solid rgba(255, 255, 255, 0.1); 
-      }
-      .glass-panel { 
-        background: rgba(255, 255, 255, 0.03); 
-        -webkit-backdrop-filter: blur(16px); /* Fix cho Safari */
-        backdrop-filter: blur(16px); 
-        border: 1px solid rgba(255, 255, 255, 0.1); 
-      }
-      
+      /* GLASS & UTILS */
+      .glass-sidebar { background: rgba(255, 255, 255, 0.05); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-right: 1px solid rgba(255, 255, 255, 0.1); }
+      .glass-panel { background: rgba(255, 255, 255, 0.03); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); }
       .submenu { transition: max-height 0.3s ease-out, opacity 0.3s ease-out; max-height: 0; opacity: 0; overflow: hidden; }
       .submenu.open { max-height: 200px; opacity: 1; }
       .menu-disabled { opacity: 0.4; pointer-events: none; filter: grayscale(1); }
       
-      /* Table Styles */
+      /* Table & Scroll */
       .nsl-table th { text-align: left; padding: 12px; background: rgba(255,255,255,0.1); color: #22d3ee; }
       .nsl-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
       .nsl-table tr:hover { background: rgba(255,255,255,0.05); }
-      
-      /* Scrollbar */
       ::-webkit-scrollbar { width: 5px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
@@ -71,6 +49,13 @@
       </div>
 
       <nav class="flex-1 overflow-y-auto py-4 space-y-2 px-2">
+        
+        <button onclick="switchToHome()" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors group mb-2 bg-white/5 border border-white/5">
+           <span class="text-xl">🏠</span> <span class="sidebar-text font-bold text-sm text-cyan-300">Trang Chủ</span>
+        </button>
+
+        <div class="border-t border-white/10 my-2"></div>
+
         <div class="menu-group">
           <button onclick="loadExternalSystem('https://hcm.quanlytruonghoc.edu.vn/', 'Quản lý Trường học', 'menu-qlth')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors group">
             <div class="flex items-center gap-3"><span class="text-xl">🏫</span> <span class="sidebar-text font-medium text-sm">QL Trường Học</span></div>
@@ -96,103 +81,102 @@
            <span class="text-xl">🔑</span> <span class="sidebar-text font-medium text-sm">Quản lý Mật khẩu</span>
         </button>
 
-        <button onclick="switchToUpdate()" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 mt-2 text-slate-300">
-           <span class="text-xl">☁️</span> <span class="sidebar-text font-medium text-sm">Cập nhật</span>
-        </button>
-      </nav>
+        </nav>
     </aside>
 
     <main class="flex-1 relative flex flex-col h-full bg-[#0c1218]/90 overflow-hidden">
-      <header class="h-16 flex justify-between items-center px-6 border-b border-white/5 bg-white/5 backdrop-blur-md z-10">
+      
+      <header class="h-16 flex justify-between items-center px-6 border-b border-white/5 bg-white/5 backdrop-blur-md z-10 shrink-0">
         <h2 id="page-title" class="text-xl font-bold text-white tracking-wide">Trang chủ</h2>
       </header>
       
-      <div id="browser-area" class="flex-1"></div>
+      <section id="view-home" class="flex flex-col h-full overflow-hidden">
+          
+          <div class="flex-1 overflow-y-auto p-6 space-y-6">
+              
+              <div class="glass-panel p-8 rounded-2xl border border-white/10 bg-gradient-to-r from-cyan-900/40 to-blue-900/40">
+                  <h1 class="text-3xl font-bold text-white mb-2">Chào mừng trở lại! 👋</h1>
+                  <p class="text-slate-300">Hệ thống hỗ trợ nhập liệu và quản lý dữ liệu tập trung.</p>
+              </div>
 
-      <section id="view-passwords" class="hidden flex-1 p-6 relative z-50 bg-[#0c1218] flex-col overflow-hidden">
-        <div class="flex justify-between items-center mb-6">
-            <div class="text-white">
-                <h3 class="text-2xl font-bold">Danh sách Tài khoản</h3>
-                <p class="text-sm text-slate-400">Quản lý thông tin đăng nhập các hệ thống.</p>
-            </div>
-            <button onclick="openEditModal()" class="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg">
-                <span>+</span> Thêm mới
-            </button>
-        </div>
+              <div class="space-y-4">
+                  <h3 class="text-lg font-bold text-cyan-400 border-l-4 border-cyan-500 pl-3">📢 Thông báo từ Nhà trường</h3>
+                  
+                  <div class="bg-white/5 p-4 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
+                      <div class="flex justify-between items-start mb-2">
+                          <h4 class="font-bold text-white">Lịch nhập điểm học kỳ I</h4>
+                          <span class="text-xs bg-red-500/20 text-red-300 px-2 py-1 rounded">Mới</span>
+                      </div>
+                      <p class="text-sm text-slate-400">Yêu cầu GVCN hoàn thành nhập điểm và nhận xét trước ngày 15/01/2026. Hệ thống sẽ khóa sổ sau 17h00.</p>
+                  </div>
 
-        <div class="glass-panel rounded-xl overflow-hidden flex-1 overflow-y-auto">
+                  <div class="bg-white/5 p-4 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
+                      <div class="flex justify-between items-start mb-2">
+                          <h4 class="font-bold text-white">Bảo trì hệ thống CSDL Ngành</h4>
+                          <span class="text-xs bg-slate-500/20 text-slate-400 px-2 py-1 rounded">10/01/2026</span>
+                      </div>
+                      <p class="text-sm text-slate-400">Hệ thống sẽ bảo trì từ 22h00 đến 23h00 tối nay. Vui lòng lưu dữ liệu trước thời điểm này.</p>
+                  </div>
+                  
+                  <div class="p-4 rounded-lg border border-dashed border-slate-700 text-center text-slate-600 text-sm">
+                      (Không có thông báo mới nào khác)
+                  </div>
+              </div>
+          </div>
+
+          <div class="shrink-0 h-auto bg-[#080d11] border-t border-white/10 p-3 flex items-center gap-4 shadow-[0_-5px_20px_rgba(0,0,0,0.5)] z-20">
+              
+              <button id="auto-update-btn" class="shrink-0 px-4 py-2 bg-slate-800 hover:bg-cyan-700 rounded-lg border border-white/10 flex items-center gap-2 transition-all group">
+                  <svg class="w-4 h-4 text-cyan-400 group-hover:text-white animate-spin hidden" id="loading-icon" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                  <span id="btn-text" class="text-xs font-bold text-slate-300 group-hover:text-white">Kiểm tra Cập nhật</span>
+              </button>
+
+              <div class="flex-1 flex flex-col justify-center h-10 bg-black/40 rounded px-3 border border-white/5 relative overflow-hidden">
+                  <div id="update-log" class="text-[10px] font-mono text-green-400/80 overflow-hidden whitespace-nowrap text-ellipsis">
+                      >> Hệ thống sẵn sàng.
+                  </div>
+                  <div id="progress-container" class="absolute bottom-0 left-0 h-0.5 w-full bg-transparent hidden">
+                      <div id="progress-bar" class="h-full bg-cyan-500 w-0 transition-all duration-300"></div>
+                  </div>
+              </div>
+
+              <div class="shrink-0 text-right">
+                  <div class="text-[10px] text-slate-500 uppercase">Phiên bản</div>
+                  <div id="current-version-display" class="text-xs font-bold text-white">...</div>
+              </div>
+          </div>
+      </section>
+
+      <div id="browser-area" class="flex-1 hidden"></div>
+
+      <section id="view-passwords" class="hidden flex-1 p-6 bg-[#0c1218] flex-col overflow-hidden">
+          <div class="flex justify-between items-center mb-6">
+            <div class="text-white"><h3 class="text-2xl font-bold">Danh sách Tài khoản</h3></div>
+            <button onclick="openEditModal()" class="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg"><span>+</span> Thêm mới</button>
+          </div>
+          <div class="glass-panel rounded-xl overflow-hidden flex-1 overflow-y-auto">
             <table class="w-full nsl-table text-sm text-slate-300">
-                <thead>
-                    <tr>
-                        <th class="w-16">STT</th>
-                        <th>Website (Domain)</th>
-                        <th>Tài khoản</th>
-                        <th class="w-48 text-center">Thao tác</th>
-                    </tr>
-                </thead>
+                <thead><tr><th class="w-16">STT</th><th>Website</th><th>Tài khoản</th><th class="w-48 text-center">Thao tác</th></tr></thead>
                 <tbody id="password-table-body"></tbody>
             </table>
-        </div>
+          </div>
       </section>
 
-      <section id="view-update" class="hidden flex-1 p-6 relative z-50 bg-[#0c1218] flex gap-6">
-        <div class="w-1/3 glass-panel rounded-2xl p-6 flex flex-col gap-6 h-fit">
-            <div class="text-center">
-                <div class="inline-flex p-4 rounded-full bg-blue-500/20 mb-4 ring-1 ring-blue-400/50 shadow-[0_0_20px_rgba(59,130,246,0.3)]">
-                    <svg class="w-10 h-10 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                </div>
-                <h3 class="text-xl font-bold text-white">Hệ thống Cập nhật</h3>
-                <p class="text-sm text-slate-400 mt-2">Phiên bản hiện tại: <span id="current-version-display" class="font-bold text-white">...</span></p>
-            </div>
-            
-            <div class="bg-black/30 rounded-lg p-4 border border-white/5">
-                <div class="flex justify-between text-sm mb-2"><span class="text-slate-400">Trạng thái:</span><span id="status-text" class="text-yellow-400 font-medium">Đang chờ...</span></div>
-            </div>
-
-            <button id="auto-update-btn" class="group relative w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-xl text-white font-bold shadow-lg hover:shadow-cyan-500/40 transition-all active:scale-95 overflow-hidden">
-                <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                <span class="relative flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5 animate-spin hidden" id="loading-icon" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    <span id="btn-text">Kiểm tra ngay</span>
-                </span>
-            </button>
-        </div>
-        
-        <div class="flex-1 glass-panel rounded-2xl p-0 flex flex-col overflow-hidden border border-slate-700/50 bg-[#0c1218]/80">
-            <div class="bg-white/5 px-4 py-2 border-b border-white/5 flex items-center justify-between">
-                <span class="text-xs font-mono text-slate-400">Terminal Output</span>
-                <div class="flex gap-1.5">
-                    <div class="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
-                    <div class="w-2.5 h-2.5 rounded-full bg-yellow-500/50"></div>
-                    <div class="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
-                </div>
-            </div>
-            <div id="update-log" class="flex-1 p-4 font-mono text-sm text-green-400/90 overflow-y-auto space-y-1"></div>
-            <div id="progress-container" class="hidden h-1 w-full bg-slate-800"><div id="progress-bar" class="h-full bg-cyan-500 w-0"></div></div>
-        </div>
-      </section>
     </main>
 
     <div id="config-modal" class="hidden fixed inset-0 bg-black/90 z-[100] flex items-center justify-center backdrop-blur-md">
         <div class="glass-panel p-6 rounded-2xl w-96 border border-white/20">
-            <h3 class="text-white font-bold mb-4 text-lg" id="modal-title">Thông tin Tài khoản</h3>
-            
-            <label for="cfg-domain" class="block text-cyan-300 text-sm mb-1">Website (Domain):</label>
-            <input id="cfg-domain" list="domain-list" class="w-full bg-slate-800 text-white p-2.5 rounded-lg mb-3 outline-none focus:ring-1 focus:ring-cyan-500" placeholder="vd: hcm.quanlytruonghoc.edu.vn">
-            <datalist id="domain-list">
-                <option value="hcm.quanlytruonghoc.edu.vn">
-                <option value="truong.hcm.edu.vn">
-            </datalist>
-
-            <label for="cfg-user" class="block text-cyan-300 text-sm mb-1">Tài khoản:</label>
-            <input id="cfg-user" class="w-full bg-slate-800 text-white p-2.5 rounded-lg mb-3 outline-none focus:ring-1 focus:ring-cyan-500">
-            
-            <label for="cfg-pass" class="block text-cyan-300 text-sm mb-1">Mật khẩu:</label>
-            <input id="cfg-pass" type="text" class="w-full bg-slate-800 text-white p-2.5 rounded-lg mb-6 outline-none focus:ring-1 focus:ring-cyan-500" placeholder="Nhập mật khẩu mới...">
-            
+            <h3 class="text-white font-bold mb-4">Thông tin Tài khoản</h3>
+            <label for="cfg-domain" class="block text-cyan-300 text-sm mb-1">Website:</label>
+            <input id="cfg-domain" list="domain-list" class="w-full bg-slate-800 text-white p-2.5 rounded-lg mb-3 outline-none" placeholder="vd: hcm.quanlytruonghoc.edu.vn">
+            <datalist id="domain-list"><option value="hcm.quanlytruonghoc.edu.vn"><option value="truong.hcm.edu.vn"></datalist>
+            <label for="cfg-user" class="block text-cyan-300 text-sm mb-1">User:</label>
+            <input id="cfg-user" class="w-full bg-slate-800 text-white p-2.5 rounded-lg mb-3 outline-none">
+            <label for="cfg-pass" class="block text-cyan-300 text-sm mb-1">Pass:</label>
+            <input id="cfg-pass" type="text" class="w-full bg-slate-800 text-white p-2.5 rounded-lg mb-6 outline-none">
             <div class="flex justify-end gap-3">
-                <button onclick="document.getElementById('config-modal').classList.add('hidden')" class="px-4 py-2 text-slate-400 hover:text-white">Hủy</button>
-                <button onclick="saveConfigToRust()" class="bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-6 py-2 rounded-lg font-bold shadow-lg">Lưu lại</button>
+                <button onclick="document.getElementById('config-modal').classList.add('hidden')" class="px-4 py-2 text-slate-400">Hủy</button>
+                <button onclick="saveConfigToRust()" class="bg-cyan-600 text-white px-6 py-2 rounded-lg font-bold">Lưu</button>
             </div>
         </div>
     </div>
