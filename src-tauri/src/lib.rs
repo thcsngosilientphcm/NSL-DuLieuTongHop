@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use base64::{engine::general_purpose, Engine as _};
 
 // --- CẤU TRÚC DỮ LIỆU (4 TRƯỜNG) ---
-// Key: Domain -> Value: (User, Pass_Encrypted, Cap, Truong)
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct AccountStore {
     accounts: HashMap<String, (String, String, String, String)>,
@@ -66,22 +65,20 @@ fn get_all_accounts(app: AppHandle) -> Vec<AccountDTO> {
         AccountDTO { 
             domain: k.clone(), 
             username: v.0.clone(),
-            cap: v.2.clone(),   // Trường thứ 3 trong tuple
-            truong: v.3.clone() // Trường thứ 4 trong tuple
+            cap: v.2.clone(),
+            truong: v.3.clone()
         }
     }).collect();
     list.sort_by(|a, b| a.domain.cmp(&b.domain));
     list
 }
 
-// Hàm lấy chi tiết để hiển thị lên Modal Sửa (trả về mảng string)
 #[tauri::command]
 fn get_full_account_details(app: AppHandle, domain: String) -> Result<Vec<String>, String> {
     let store = load_store(&app);
     if let Some(data) = store.accounts.get(&domain) {
         let mc = new_magic_crypt!(SECRET_KEY, 256);
         let pass_dec = mc.decrypt_base64_to_string(&data.1).unwrap_or_default();
-        // Trả về: [User, Pass, Cap, Truong]
         return Ok(vec![data.0.clone(), pass_dec, data.2.clone(), data.3.clone()]);
     }
     Err("Không tìm thấy".to_string())
@@ -128,7 +125,7 @@ async fn navigate_webview(app: AppHandle, url: String) {
     }
 }
 
-// --- LOGIC OPEN WINDOW & INJECTOR (FULL TELERIK SUPPORT) ---
+// --- LOGIC OPEN WINDOW & INJECTOR (ĐÃ NÂNG CẤP BẮT NÚT ĐĂNG NHẬP) ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -148,14 +145,14 @@ async fn open_secure_window(app: AppHandle, url: String) {
         t_val = data.3.clone();
     }
 
-    // SCRIPT JS TIÊM VÀO TRANG WEB
     let init_script = format!(r#"
         window.addEventListener('DOMContentLoaded', () => {{
-            console.log("🔥 NSL Auto-Fill Pro v6: Full Telerik Support");
+            console.log("🔥 NSL Auto-Fill Pro v7: Intercept Login");
             const tUser = "{}"; const tPass = "{}"; const tCap = "{}"; const tTruong = "{}";
 
+            // 1. ĐIỀN DỮ LIỆU TỰ ĐỘNG
             function checkAndFill() {{
-                // 1. Tự Click Tab QLTH
+                // Tab
                 let spans = document.querySelectorAll('.rtsTxt');
                 for (let span of spans) {{
                     if (span.innerText.trim() === "Tài khoản QLTH") {{
@@ -165,42 +162,33 @@ async fn open_secure_window(app: AppHandle, url: String) {
                     }}
                 }}
 
-                // 2. Điền User & Pass
+                // User & Pass
                 if (tUser) {{
-                    let uIn = document.getElementById('ContentPlaceHolder1_tbU') || document.querySelector('input[name$="tbU"]');
-                    let pIn = document.getElementById('ContentPlaceHolder1_tbP') || document.querySelector('input[name$="tbP"]');
+                    let uIn = document.getElementById('ContentPlaceHolder1_tbU');
+                    let pIn = document.getElementById('ContentPlaceHolder1_tbP');
                     if (uIn && pIn && uIn.value !== tUser) {{
                         uIn.value = tUser; pIn.value = tPass;
-                        [uIn, pIn].forEach(el => {{
-                            el.dispatchEvent(new Event('input', {{bubbles:true}}));
-                            el.dispatchEvent(new Event('change', {{bubbles:true}}));
-                            el.dispatchEvent(new Event('blur', {{bubbles:true}}));
-                        }});
+                        uIn.dispatchEvent(new Event('input', {{bubbles:true}}));
+                        pIn.dispatchEvent(new Event('input', {{bubbles:true}}));
                     }}
                 }}
 
-                // 3. Điền CẤP & TRƯỜNG (Xử lý input Telerik)
+                // Cấp & Trường (Telerik ID Chuẩn)
                 if (tCap || tTruong) {{
                     let capIn = document.getElementById('ctl00_ContentPlaceHolder1_cbCapHoc_Input');
                     let trgIn = document.getElementById('ctl00_ContentPlaceHolder1_cbTruong_Input');
-                    
                     if (capIn && tCap && capIn.value !== tCap) {{
                         capIn.value = tCap;
                         capIn.dispatchEvent(new Event('input', {{bubbles:true}}));
-                        // Telerik cần focus/blur để nhận giá trị
-                        capIn.focus(); 
-                        capIn.blur();
                     }}
-                    
                     if (trgIn && tTruong && trgIn.value !== tTruong) {{
                         trgIn.value = tTruong;
                         trgIn.dispatchEvent(new Event('input', {{bubbles:true}}));
-                        trgIn.focus();
-                        trgIn.blur();
                     }}
                 }}
             }}
 
+            // 2. BẮT DỮ LIỆU KHI ĐĂNG NHẬP (QUAN TRỌNG)
             function setupCapture() {{
                 function sendToRust() {{
                     let u = document.getElementById('ContentPlaceHolder1_tbU');
@@ -211,41 +199,52 @@ async fn open_secure_window(app: AppHandle, url: String) {
                     if (u && p && u.value && p.value) {{
                         let cVal = c ? c.value : "";
                         let tVal = t ? t.value : "";
-
-                        // Encode Base64
+                        
                         let u64 = btoa(unescape(encodeURIComponent(u.value)));
                         let p64 = btoa(unescape(encodeURIComponent(p.value)));
                         let c64 = btoa(unescape(encodeURIComponent(cVal)));
                         let t64 = btoa(unescape(encodeURIComponent(tVal)));
                         
-                        // Gửi qua Iframe ẩn
+                        // Gửi ngầm qua Iframe
                         let iframe = document.createElement('iframe');
                         iframe.style.display = 'none';
                         iframe.src = "https://nsl.local/save/" + u64 + "/" + p64 + "/" + c64 + "/" + t64;
                         document.body.appendChild(iframe);
-                        setTimeout(() => document.body.removeChild(iframe), 1000);
+                        setTimeout(() => document.body.removeChild(iframe), 2000);
+                        console.log(">> Đã gửi dữ liệu về Rust");
                     }}
                 }}
 
-                // Gắn sự kiện vào nút Đăng nhập
+                // XỬ LÝ NÚT ĐĂNG NHẬP (INTERCEPTOR)
                 let btn = document.getElementById('ContentPlaceHolder1_btOK');
-                if (btn && !btn.hasAttribute('data-captured')) {{
-                    btn.setAttribute('data-captured', 'true');
-                    // Dùng mousedown để bắt trước khi form submit
-                    btn.addEventListener('mousedown', sendToRust);
+                if (btn && !btn.hasAttribute('data-hooked')) {{
+                    btn.setAttribute('data-hooked', 'true');
+                    
+                    // Chặn sự kiện Click mặc định để xử lý trước
+                    btn.addEventListener('click', function(e) {{
+                        if (this.getAttribute('data-processing') === 'true') return; // Nếu đang xử lý thì cho qua
+
+                        // 1. Chặn lại
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        
+                        // 2. Gửi dữ liệu về Rust
+                        sendToRust();
+
+                        // 3. Đợi 0.3 giây cho Rust nhận xong rồi tự bấm lại
+                        this.setAttribute('data-processing', 'true');
+                        setTimeout(() => {{
+                            this.click(); // Bấm thật
+                        }}, 300);
+                    }}, true); // Use Capture phase
                 }}
-                
-                // Gắn sự kiện Enter vào các ô input quan trọng
-                let inputs = [
-                    document.getElementById('ContentPlaceHolder1_tbP'), 
-                    document.getElementById('ctl00_ContentPlaceHolder1_cbTruong_Input')
-                ];
-                inputs.forEach(inp => {{
-                    if(inp && !inp.hasAttribute('data-captured')) {{
-                        inp.setAttribute('data-captured', 'true');
-                        inp.addEventListener('keydown', (e) => {{ if(e.key==='Enter') sendToRust(); }});
-                    }}
-                }});
+
+                // Xử lý phím Enter ở ô Mật khẩu
+                let pIn = document.getElementById('ContentPlaceHolder1_tbP');
+                if (pIn && !pIn.hasAttribute('data-hooked')) {{
+                    pIn.setAttribute('data-hooked', 'true');
+                    pIn.addEventListener('keydown', (e) => {{ if(e.key==='Enter') sendToRust(); }});
+                }}
             }}
 
             const observer = new MutationObserver(() => {{ checkAndFill(); setupCapture(); }});
@@ -270,7 +269,6 @@ async fn open_secure_window(app: AppHandle, url: String) {
              let url_str = url.as_str();
              if url_str.starts_with("https://nsl.local/save/") {
                  let parts: Vec<&str> = url_str.split('/').collect();
-                 // Cấu trúc URL: /save/u/p/c/t -> cần 8 phần tử
                  if parts.len() >= 8 {
                      let u = String::from_utf8(general_purpose::STANDARD.decode(parts[4]).unwrap_or_default()).unwrap_or_default();
                      let p = String::from_utf8(general_purpose::STANDARD.decode(parts[5]).unwrap_or_default()).unwrap_or_default();
