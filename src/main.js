@@ -3,16 +3,21 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { getVersion } from '@tauri-apps/api/app';
 
-// --- UI Logic (Sidebar & Resize) ---
+// ==========================================
+// 1. SIDEBAR THÔNG MINH
+// ==========================================
 window.toggleSidebar = async () => {
     const sb = document.getElementById('sidebar');
     const ic = document.getElementById('toggle-icon');
-    const collapsed = sb.classList.toggle('sidebar-collapsed');
-    ic.style.transform = collapsed ? 'rotate(180deg)' : 'rotate(0deg)';
+    const isCollapsed = sb.classList.toggle('sidebar-collapsed');
     
-    if(collapsed) document.querySelectorAll('.submenu').forEach(s => s.classList.remove('open'));
+    ic.style.transform = isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)';
+    
+    if (isCollapsed) {
+        document.querySelectorAll('.submenu').forEach(s => s.classList.remove('open'));
+    }
 
-    try { await invoke('update_webview_layout', { sidebarWidth: collapsed ? 64.0 : 260.0 }); } catch (e) {}
+    try { await invoke('update_webview_layout', { sidebarWidth: isCollapsed ? 64.0 : 260.0 }); } catch (e) {}
 };
 
 window.addEventListener('resize', async () => {
@@ -21,17 +26,29 @@ window.addEventListener('resize', async () => {
     try { await invoke('update_webview_layout', { sidebarWidth: w }); } catch (e) {}
 });
 
-// --- Navigation Logic ---
+// ==========================================
+// 2. QUẢN LÝ VIEW (FIX LỖI LAYOUT)
+// ==========================================
 function hideAllViews() {
+    // Ẩn tất cả các màn hình chức năng
     document.getElementById('view-update').classList.add('hidden');
     document.getElementById('view-update').classList.remove('flex');
     document.getElementById('view-passwords').classList.add('hidden');
     document.getElementById('view-passwords').classList.remove('flex');
+    
+    // Mặc định ẩn luôn vùng Browser Area để không chiếm chỗ
+    document.getElementById('browser-area').classList.add('hidden');
 }
 
+// -> TAB TRÌNH DUYỆT (QLTH / CSDL)
 window.loadExternalSystem = async (url, name, menuIdToUnlock) => {
-    hideAllViews();
+    hideAllViews(); 
+    
+    // HIỆN LẠI VÙNG BROWSER (Để Rust biết chỗ mà vẽ, dù nó là cửa sổ con nhưng giữ logic layout)
+    document.getElementById('browser-area').classList.remove('hidden');
+    
     document.getElementById('page-title').innerText = name;
+    
     await invoke('open_secure_window', { url: url });
     
     const sb = document.getElementById('sidebar');
@@ -44,9 +61,11 @@ window.loadExternalSystem = async (url, name, menuIdToUnlock) => {
 
 window.navigateRust = async (url) => { await invoke('navigate_webview', { url: url }); };
 
+// -> TAB CẬP NHẬT
 window.switchToUpdate = async () => {
-    await invoke('hide_embedded_view');
-    hideAllViews();
+    await invoke('hide_embedded_view'); // Đóng trình duyệt con
+    hideAllViews(); // Hàm này đã ẩn browser-area -> Nội dung sẽ tràn lên đầu trang
+    
     const v = document.getElementById('view-update');
     v.classList.remove('hidden');
     v.classList.add('flex');
@@ -54,17 +73,22 @@ window.switchToUpdate = async () => {
     if(document.getElementById('auto-update-btn')) runOneClickUpdate();
 };
 
+// -> TAB QUẢN LÝ MẬT KHẨU
 window.switchToPasswordManager = async () => {
-    await invoke('hide_embedded_view');
-    hideAllViews();
+    await invoke('hide_embedded_view'); // Đóng trình duyệt con
+    hideAllViews(); // Hàm này đã ẩn browser-area -> Nội dung sẽ tràn lên đầu trang
+    
     const v = document.getElementById('view-passwords');
     v.classList.remove('hidden');
     v.classList.add('flex');
     document.getElementById('page-title').innerText = "Quản lý Mật khẩu";
+    
     loadPasswordTable();
 };
 
-// --- Password Manager Logic (Table) ---
+// ==========================================
+// 3. LOGIC BẢNG MẬT KHẨU (TABLE)
+// ==========================================
 async function loadPasswordTable() {
     const tbody = document.getElementById('password-table-body');
     tbody.innerHTML = '<tr><td colspan="4" class="text-center text-slate-500 py-4">Đang tải...</td></tr>';
@@ -134,7 +158,7 @@ window.saveConfigToRust = async () => {
     catch(e) { alert("Lỗi: " + e); }
 };
 
-// --- UPDATE LOGIC (FIX LỖI HIỂN THỊ) ---
+// --- UPDATE LOGIC ---
 const logEl = document.getElementById('update-log');
 const btnCheck = document.getElementById('auto-update-btn');
 const btnText = document.getElementById('btn-text');
@@ -158,8 +182,6 @@ async function initSystem() {
       const v = await getVersion();
       const vd = document.getElementById('current-version-display');
       if(vd) vd.innerText = `v${v}`;
-      
-      // Mặc định vào trang update để chạy auto check
       switchToUpdate();
   } catch (e) {}
 }
@@ -174,11 +196,8 @@ async function runOneClickUpdate() {
         statusText.className = "text-yellow-400 font-medium animate-pulse";
     }
     
-    // Xóa log cũ
     if(logEl) logEl.innerHTML = '';
-    
     log(">> [AUTO] Bắt đầu quy trình cập nhật...");
-    log(">> Đang kết nối máy chủ GitHub...");
 
     try {
         const update = await check();
@@ -188,10 +207,7 @@ async function runOneClickUpdate() {
             btnText.innerText = "Đang tải...";
             await installUpdate(update);
         } else {
-            // FIX LỖI: Thêm dòng log này để màn hình không bị trống
             log(">> [INFO] Bạn đang dùng phiên bản mới nhất.", 'success');
-            log(">> Không có bản cập nhật nào.", 'info');
-            
             if(statusText) {
                 statusText.innerText = "Hệ thống đã cập nhật";
                 statusText.className = "text-green-400 font-bold";
@@ -200,10 +216,6 @@ async function runOneClickUpdate() {
         }
     } catch (error) {
         log(`>> [LỖI] ${error}`, 'error');
-        if(statusText) {
-            statusText.innerText = "Lỗi kết nối";
-            statusText.className = "text-red-400 font-bold";
-        }
         resetButtonState("Thử lại");
     }
 }
@@ -215,7 +227,6 @@ async function installUpdate(update) {
         await update.downloadAndInstall((event) => {
             if (event.event === 'Started') {
                 contentLength = event.data.contentLength;
-                log(">> Bắt đầu tải gói tin...");
             } else if (event.event === 'Progress') {
                 downloaded += event.data.chunkLength;
                 if (contentLength) {
@@ -225,10 +236,9 @@ async function installUpdate(update) {
                 }
             } else if (event.event === 'Finished') {
                 progressBar.style.width = '100%';
-                log(">> Tải xong. Đang giải nén...", 'success');
             }
         });
-        statusText.innerText = "Hoàn tất! Khởi động lại...";
+        statusText.innerText = "Hoàn tất!";
         await new Promise(r => setTimeout(r, 1500));
         await relaunch();
     } catch (e) {
