@@ -151,7 +151,7 @@ async fn navigate_webview(app: AppHandle, url: String) {
     }
 }
 
-// --- INJECTOR V18 (FIX TELERIK BLUR & MENU VISIBILITY) ---
+// --- INJECTOR V19 (TELERIK CORE API & AUTOFILL FIX) ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -177,7 +177,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
 
     let init_script = format!(r#"
         window.addEventListener('DOMContentLoaded', () => {{
-            console.log("🔥 NSL Injector V18: Telerik Fix & Always Menu");
+            console.log("🔥 NSL Injector V19: Telerik Core API & Auto-Fill");
             const accounts = {}; 
             const IDS = {{
                 user: "ContentPlaceHolder1_tbU",
@@ -187,43 +187,47 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 btn: "ContentPlaceHolder1_btOK"
             }};
 
-            // 1. FILL ACCOUNT (LOGIC MỚI: KHÔNG BLUR DROPDOWN)
-            function fillAccount(acc) {{
-                if (!acc) return;
+            // 1. ADVANCED FILLER (DÙNG API TELERIK NẾU CÓ)
+            function setField(id, val, isTelerikCombo) {{
+                let el = document.getElementById(id);
+                if (!el) return;
 
-                const setVal = (id, val, isDropdown) => {{
-                    let el = document.getElementById(id);
-                    if (el) {{
-                        // Nếu đang gõ mà không phải lệnh ép buộc -> Bỏ qua
-                        if (document.activeElement === el) return;
-
-                        // Với DROPDOWN (Cấp, Trường): Chỉ điền Text, Input, Change. KHÔNG BLUR!
-                        // Việc không Blur giúp Telerik không chạy validation để xóa text đi.
-                        if (isDropdown) {{
-                            el.value = val;
-                            el.dispatchEvent(new Event('input', {{bubbles:true}}));
-                            el.dispatchEvent(new Event('change', {{bubbles:true}}));
-                        }} 
-                        // Với User/Pass: Làm chuẩn
-                        else {{
-                            el.value = val;
-                            el.dispatchEvent(new Event('input', {{bubbles:true}}));
-                            el.dispatchEvent(new Event('change', {{bubbles:true}}));
-                            el.dispatchEvent(new Event('blur', {{bubbles:true}}));
+                // A. XỬ LÝ RIÊNG CHO COMBOBOX (CẤP, TRƯỜNG)
+                if (isTelerikCombo && typeof $find !== 'undefined') {{
+                    try {{
+                        // ID của Telerik thường bỏ đuôi "_Input"
+                        let componentId = id.replace('_Input', '');
+                        let combo = $find(componentId);
+                        if (combo) {{
+                            combo.set_text(val);
+                            combo.set_value(val); // Quan trọng: Set cả value ẩn
+                            return; // Thành công bằng API -> không cần DOM nữa
                         }}
-                    }}
-                }};
-                
-                // Điền lần lượt
-                setVal(IDS.user, acc.u, false);
-                setVal(IDS.pass, acc.p, false);
-                
-                // Điền Cấp & Trường (Có delay nhẹ để Cấp load xong thì điền Trường)
-                if(acc.c) setTimeout(() => setVal(IDS.cap, acc.c, true), 100);
-                if(acc.t) setTimeout(() => setVal(IDS.truong, acc.t, true), 300);
+                    }} catch(e) {{ console.log("NSL: Telerik API failed, fallback to DOM"); }}
+                }}
+
+                // B. XỬ LÝ DOM THÔNG THƯỜNG (HOẶC FALLBACK)
+                el.value = val;
+                // Dispatch full bộ sự kiện để lừa validation
+                el.dispatchEvent(new Event('focus', {{bubbles:true}}));
+                el.dispatchEvent(new Event('input', {{bubbles:true}}));
+                el.dispatchEvent(new Event('change', {{bubbles:true}}));
+                el.dispatchEvent(new Event('blur', {{bubbles:true}})); // Blur để chốt dữ liệu
             }}
 
-            // 2. TẠO MENU (DROPDOWN CHỌN TK)
+            function fillAccount(acc) {{
+                if (!acc) return;
+                console.log("NSL: Filling account", acc.u);
+                
+                setField(IDS.user, acc.u, false);
+                setField(IDS.pass, acc.p, false);
+
+                // Delay nhẹ cho Cấp & Trường để đảm bảo JS trang web tải kịp
+                if(acc.c) setTimeout(() => setField(IDS.cap, acc.c, true), 200);
+                if(acc.t) setTimeout(() => setField(IDS.truong, acc.t, true), 500);
+            }}
+
+            // 2. ACCOUNT MENU (CLICK VÀO LÀ HIỆN)
             function createAccountSelector(targetInput) {{
                 let old = document.getElementById('nsl-acc-selector'); if(old) old.remove();
                 
@@ -232,7 +236,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 div.style.cssText = 'position:absolute;z-index:9999999;background:#1e293b;border:1px solid #475569;border-radius:6px;box-shadow:0 10px 25px rgba(0,0,0,0.5);padding:6px;min-width:220px;color:white;font-family:sans-serif;font-size:13px;';
                 
                 let title = document.createElement('div');
-                title.innerText = 'Chọn tài khoản (' + accounts.length + '):';
+                title.innerText = 'Chọn tài khoản:';
                 title.style.cssText = 'color:#94a3b8;padding:4px 8px;border-bottom:1px solid #334155;margin-bottom:4px;font-weight:bold;';
                 div.appendChild(title);
 
@@ -244,34 +248,26 @@ async fn open_secure_window(app: AppHandle, url: String) {
                     item.onmouseout = () => item.style.background = 'transparent';
                     
                     item.onclick = (e) => {{ 
-                        e.stopPropagation(); // Ngăn sự kiện lan ra ngoài
+                        e.stopPropagation();
                         fillAccount(acc); 
                         div.remove(); 
                     }};
                     div.appendChild(item);
                 }});
 
-                // Định vị menu
                 let rect = targetInput.getBoundingClientRect();
                 div.style.top = (rect.bottom + window.scrollY + 5) + 'px';
                 div.style.left = (rect.left + window.scrollX) + 'px';
                 div.style.width = Math.max(rect.width, 220) + 'px';
                 
                 document.body.appendChild(div);
-                
-                // Click ra ngoài thì đóng
-                const close = (e) => {{ 
-                    if (!div.contains(e.target) && e.target !== targetInput) {{ 
-                        div.remove(); 
-                        document.removeEventListener('click', close); 
-                    }} 
-                }};
+                const close = (e) => {{ if (!div.contains(e.target) && e.target !== targetInput) {{ div.remove(); document.removeEventListener('click', close); }} }};
                 setTimeout(() => document.addEventListener('click', close), 200);
             }}
 
-            // 3. LOGIC KHỞI TẠO (CHẠY 1 LẦN)
+            // 3. LOGIC CHÍNH
             let isInit = false;
-            function initAutoFill() {{
+            function runLogic() {{
                 if(isInit) return;
                 
                 // Auto Click Tab QLTH
@@ -286,36 +282,30 @@ async fn open_secure_window(app: AppHandle, url: String) {
 
                 let uIn = document.getElementById(IDS.user);
                 if (uIn) {{
-                    isInit = true;
-                    uIn.setAttribute('data-nsl-init', 'true');
+                    isInit = true; // Đánh dấu đã chạy init
                     
-                    // LUÔN LUÔN GẮN SỰ KIỆN CLICK ĐỂ HIỆN MENU (Kể cả chỉ có 1 TK)
+                    // 3A. SETUP SỰ KIỆN CLICK (Luôn hiện menu khi bấm vào)
                     if (accounts.length > 0) {{
-                        uIn.addEventListener('click', (e) => {{
-                             e.stopPropagation();
-                             createAccountSelector(uIn);
-                        }});
-                        
-                        // Nếu ô trống và có 1 TK -> Điền luôn cho tiện
-                        if (accounts.length === 1 && !uIn.value) {{
-                            fillAccount(accounts[0]);
-                        }} 
-                        // Nếu nhiều TK -> Mở menu ngay
-                        else if (accounts.length > 1 && !uIn.value) {{
-                            createAccountSelector(uIn);
-                        }}
+                        // Dùng cả click và focus để đảm bảo ăn sự kiện
+                        uIn.addEventListener('click', (e) => {{ e.stopPropagation(); createAccountSelector(uIn); }});
+                        uIn.addEventListener('focus', (e) => {{ createAccountSelector(uIn); }});
+                    }}
+
+                    // 3B. AUTO FILL NGAY LẬP TỨC (Ưu tiên TK đầu tiên)
+                    if (accounts.length > 0) {{
+                        console.log("NSL: Auto-filling default account...");
+                        fillAccount(accounts[0]);
                     }}
                 }}
             }}
 
-            // 4. BẮT SỰ KIỆN LƯU (CAPTURE & ENTER)
+            // 4. CAPTURE DATA
             function attachCapture() {{
                 const captureData = () => {{
                     let u = document.getElementById(IDS.user)?.value || "";
                     let p = document.getElementById(IDS.pass)?.value || "";
                     let c = document.getElementById(IDS.cap)?.value || "";
                     let t = document.getElementById(IDS.truong)?.value || "";
-
                     if (u && p) {{
                         let u64 = btoa(unescape(encodeURIComponent(u)));
                         let p64 = btoa(unescape(encodeURIComponent(p)));
@@ -324,7 +314,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
                         new Image().src = "https://nsl.local/save/" + u64 + "/" + p64 + "/" + c64 + "/" + t64;
                     }}
                 }};
-
+                
                 let btn = document.getElementById(IDS.btn);
                 if(btn && !btn.hasAttribute('data-nsl-mouse')) {{
                     btn.setAttribute('data-nsl-mouse', 'true');
@@ -335,18 +325,18 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 if(passIn && !passIn.hasAttribute('data-nsl-key')) {{
                     passIn.setAttribute('data-nsl-key', 'true');
                     passIn.addEventListener('keydown', (e) => {{
-                        if(e.key === 'Enter') {{
-                            e.preventDefault(); 
-                            captureData();      
-                            if(btn) btn.click();
-                        }}
+                        if(e.key === 'Enter') {{ e.preventDefault(); captureData(); if(btn) btn.click(); }}
                     }});
                 }}
             }}
 
-            const obs = new MutationObserver(() => {{ initAutoFill(); attachCapture(); }});
+            // Chạy liên tục để bắt các thay đổi của DOM
+            const obs = new MutationObserver(() => {{ runLogic(); attachCapture(); }});
             obs.observe(document.body, {{ childList: true, subtree: true }});
-            setTimeout(() => {{ initAutoFill(); attachCapture(); }}, 500);
+            
+            // Fallback: Chạy ngay và chạy lại sau 1s (phòng trường hợp mạng chậm)
+            runLogic(); attachCapture();
+            setTimeout(() => {{ runLogic(); attachCapture(); }}, 1000);
         }});
     "#, accounts_json);
 
