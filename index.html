@@ -8,36 +8,20 @@
     <style>
       body { background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); }
       .no-select { -webkit-user-select: none; user-select: none; cursor: default; }
-
-      /* SIDEBAR */
       .fixed-sidebar { width: 260px; flex-shrink: 0; transition: width 0.3s ease; z-index: 50; }
       .sidebar-collapsed { width: 64px !important; }
-      
-      /* Ẩn chữ khi thu gọn */
-      .sidebar-collapsed .sidebar-text, 
-      .sidebar-collapsed .menu-arrow { display: none; }
+      .sidebar-collapsed .sidebar-text, .sidebar-collapsed .menu-arrow { display: none; }
       .sidebar-collapsed .submenu { display: none !important; }
-      
-      /* Căn giữa icon khi thu gọn */
       .sidebar-collapsed .logo-box { justify-content: center; margin: 0 auto; }
       .sidebar-collapsed #toggle-icon { transform: rotate(180deg); }
       .sidebar-collapsed .menu-group button { justify-content: center; padding: 0; }
       .sidebar-collapsed .menu-group button div { justify-content: center; }
-
-      /* --- XỬ LÝ PHẦN BẢN QUYỀN (MỚI) --- */
-      /* Mặc định: Ẩn icon nhỏ, Hiện text to */
       .copyright-mini { display: none; }
       .copyright-full { display: block; opacity: 1; transition: opacity 0.5s ease; }
-
-      /* Khi thu gọn: Hiện icon nhỏ, Ẩn text to */
       .sidebar-collapsed .copyright-mini { display: flex; justify-content: center; align-items: center; }
       .sidebar-collapsed .copyright-full { display: none; opacity: 0; }
-      
-      /* UTILS */
       .glass-sidebar { background: rgba(255, 255, 255, 0.05); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-right: 1px solid rgba(255, 255, 255, 0.1); }
       .glass-panel { background: rgba(255, 255, 255, 0.03); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); }
-      
-      /* Table & Scroll */
       .nsl-table th { text-align: left; padding: 12px; background: rgba(255,255,255,0.1); color: #22d3ee; }
       .nsl-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
       .nsl-table tr:hover { background: rgba(255,255,255,0.05); }
@@ -50,7 +34,6 @@
     </style>
   </head>
   <body class="h-screen w-screen overflow-hidden text-slate-200 font-sans no-select flex">
-    
     <aside id="sidebar" class="glass-sidebar fixed-sidebar h-full flex flex-col relative z-50">
       <div class="h-16 flex items-center justify-between px-4 border-b border-white/10 relative shrink-0">
         <div class="flex items-center gap-2 overflow-hidden logo-box">
@@ -61,13 +44,11 @@
             <svg class="w-3 h-3 text-white transition-transform duration-300" id="toggle-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
         </button>
       </div>
-
       <nav class="flex-1 overflow-y-auto py-4 space-y-2 px-2">
         <button onclick="switchToHome()" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors group mb-2 bg-white/5 border border-white/5">
            <span class="text-xl">🏠</span> <span class="sidebar-text font-bold text-sm text-cyan-300">Trang Chủ</span>
         </button>
         <div class="border-t border-white/10 my-2"></div>
-
         <div class="menu-group">
           <button onclick="loadExternalSystem('https://hcm.quanlytruonghoc.edu.vn/', 'Quản lý Trường học', 'menu-qlth')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors group">
             <div class="flex items-center gap-3"><span class="text-xl">🏫</span> <span class="sidebar-text font-medium text-sm">QL Trường Học</span></div>
@@ -78,7 +59,6 @@
             <button onclick="navigateRust('https://hcm.quanlytruonghoc.edu.vn/nhan-xet')" class="w-full text-left px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-white/5 rounded-md">👉 Nhận xét</button>
           </div>
         </div>
-
         <div class="menu-group">
           <button onclick="loadExternalSystem('https://truong.hcm.edu.vn/', 'CSDL Ngành', 'menu-csdl')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors group">
             <div class="flex items-center gap-3"><span class="text-xl">💾</span> <span class="sidebar-text font-medium text-sm">CSDL Ngành</span></div>
@@ -88,34 +68,25 @@
             <button onclick="navigateRust('https://truong.hcm.edu.vn/hoc-ba-dien-tu')" class="w-full text-left px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-white/5 rounded-md">👉 Ký học bạ</button>
           </div>
         </div>
-
         <button onclick="switchToPasswordManager()" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 mt-4 text-slate-300">
            <span class="text-xl">🔑</span> <span class="sidebar-text font-medium text-sm">Quản lý Mật khẩu</span>
         </button>
       </nav>
-      
       <div class="shrink-0 p-4 border-t border-white/10 bg-black/20 backdrop-blur-sm relative overflow-hidden">
           <div class="copyright-full text-center">
               <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Developed by</p>
               <p class="text-sm font-bold bg-gradient-to-r from-cyan-400 to-blue-400 text-transparent bg-clip-text">THCS Ngô Sĩ Liên</p>
-              <div class="flex justify-center items-center gap-1 mt-1 opacity-60">
-                  <span class="text-[10px] text-slate-300">© 2026 Tan Son Hoa</span>
-              </div>
+              <div class="flex justify-center items-center gap-1 mt-1 opacity-60"><span class="text-[10px] text-slate-300">© 2026 Tan Son Hoa</span></div>
           </div>
-          
           <div class="copyright-mini h-full w-full">
-              <div class="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center bg-white/5 hover:bg-white/10 transition-colors cursor-help" title="Developed by THCS Ngô Sĩ Liên © 2026">
-                  <span class="text-cyan-400 font-bold text-xs">©</span>
-              </div>
+              <div class="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center bg-white/5 hover:bg-white/10 transition-colors cursor-help" title="Developed by THCS Ngô Sĩ Liên © 2026"><span class="text-cyan-400 font-bold text-xs">©</span></div>
           </div>
       </div>
     </aside>
-
     <main class="flex-1 relative flex flex-col h-full bg-[#0c1218]/90 overflow-hidden">
       <header class="h-16 flex justify-between items-center px-6 border-b border-white/5 bg-white/5 backdrop-blur-md z-10 shrink-0">
         <h2 id="page-title" class="text-xl font-bold text-white tracking-wide">Trang chủ</h2>
       </header>
-      
       <section id="view-home" class="flex flex-col h-full overflow-hidden">
           <div class="flex-1 overflow-y-auto p-6 space-y-6">
               <div class="glass-panel p-8 rounded-2xl border border-white/10 bg-gradient-to-r from-cyan-900/40 to-blue-900/40 shadow-2xl">
@@ -124,13 +95,9 @@
               </div>
               <div class="space-y-4">
                   <h3 class="text-lg font-bold text-cyan-400 border-l-4 border-cyan-500 pl-3">📢 Thông báo từ Nhà trường</h3>
-                  <div class="bg-white/5 p-4 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
-                      <h4 class="font-bold text-white mb-1">Lịch nhập điểm học kỳ I</h4>
-                      <p class="text-sm text-slate-400">Yêu cầu hoàn thành trước 15/01/2026.</p>
-                  </div>
+                  <div class="bg-white/5 p-4 rounded-lg border border-white/5 hover:bg-white/10 transition-colors"><h4 class="font-bold text-white mb-1">Lịch nhập điểm học kỳ I</h4><p class="text-sm text-slate-400">Yêu cầu hoàn thành trước 15/01/2026.</p></div>
               </div>
           </div>
-
           <div class="shrink-0 h-auto bg-[#080d11] border-t border-white/10 p-3 flex items-center gap-4 shadow-[0_-5px_20px_rgba(0,0,0,0.5)] z-20">
               <button id="auto-update-btn" class="shrink-0 px-4 py-2 bg-slate-800 hover:bg-cyan-700 rounded-lg border border-white/10 flex items-center gap-2 transition-all group">
                   <svg class="w-4 h-4 text-cyan-400 group-hover:text-white animate-spin hidden" id="loading-icon" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
@@ -143,9 +110,7 @@
               <div class="shrink-0 text-right"><div class="text-[10px] text-slate-500 uppercase">Phiên bản</div><div id="current-version-display" class="text-xs font-bold text-white">...</div></div>
           </div>
       </section>
-
       <div id="browser-area" class="flex-1 hidden"></div>
-
       <section id="view-passwords" class="hidden flex-1 p-6 bg-[#0c1218] flex-col overflow-hidden">
         <div class="flex justify-between items-center mb-6">
             <div class="text-white"><h3 class="text-2xl font-bold">Danh sách Tài khoản</h3></div>
@@ -159,35 +124,28 @@
         </div>
       </section>
     </main>
-
     <div id="config-modal" class="hidden fixed inset-0 bg-black/90 z-[100] flex items-center justify-center backdrop-blur-md">
         <div class="glass-panel p-6 rounded-2xl w-96 border border-white/20">
             <h3 class="text-white font-bold mb-4">Thông tin Tài khoản</h3>
             <label for="cfg-domain" class="block text-cyan-300 text-xs mb-1">Website:</label>
             <input id="cfg-domain" list="domain-list" class="w-full bg-slate-800 text-white p-2 rounded mb-2 text-sm border border-white/10" placeholder="...quanlytruonghoc.edu.vn">
             <datalist id="domain-list"><option value="hcm.quanlytruonghoc.edu.vn"><option value="truong.hcm.edu.vn"></datalist>
-
             <label for="cfg-user" class="block text-cyan-300 text-xs mb-1">Tài khoản:</label>
             <input id="cfg-user" class="w-full bg-slate-800 text-white p-2 rounded mb-2 text-sm border border-white/10">
-
             <label for="cfg-pass" class="block text-cyan-300 text-xs mb-1">Mật khẩu:</label>
             <input id="cfg-pass" type="text" class="w-full bg-slate-800 text-white p-2 rounded mb-2 text-sm border border-white/10">
-
             <label for="cfg-cap" class="block text-cyan-300 text-xs mb-1">Cấp học:</label>
             <select id="cfg-cap" class="w-full bg-slate-800 text-white p-2 rounded mb-2 text-sm border border-white/10 appearance-none">
                 <option value="">-- Chọn cấp học --</option><option value="Mầm non">Mầm non</option><option value="Tiểu học">Tiểu học</option><option value="Trung học cơ sở">Trung học cơ sở</option><option value="Trung học phổ thông">Trung học phổ thông</option><option value="Giáo dục thường xuyên">Giáo dục thường xuyên</option>
             </select>
-
             <label for="cfg-truong" class="block text-cyan-300 text-xs mb-1">Trường:</label>
             <input id="cfg-truong" class="w-full bg-slate-800 text-white p-2 rounded mb-4 text-sm border border-white/10">
-
             <div class="flex justify-end gap-3">
                 <button onclick="document.getElementById('config-modal').classList.add('hidden')" class="px-4 py-2 text-slate-400 text-sm">Hủy</button>
                 <button onclick="saveConfigToRust()" class="bg-cyan-600 text-white px-6 py-2 rounded font-bold text-sm">Lưu</button>
             </div>
         </div>
     </div>
-    
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

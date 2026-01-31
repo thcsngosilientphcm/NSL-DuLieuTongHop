@@ -112,7 +112,7 @@ window.saveConfigToRust = async()=>{
     await invoke('save_account',{domain:d,user:u,pass:p,cap:c,truong:t}); document.getElementById('config-modal').classList.add('hidden'); loadPasswordTable();
 };
 
-// 4. UPDATE LOGIC (FOOTER)
+// 4. UPDATE LOGIC
 const logEl = document.getElementById('update-log');
 const btnCheck = document.getElementById('auto-update-btn');
 const btnText = document.getElementById('btn-text');

@@ -6,7 +6,7 @@ use magic_crypt::{new_magic_crypt, MagicCryptTrait};
 use serde::{Deserialize, Serialize};
 use base64::{engine::general_purpose, Engine as _};
 
-// --- CẤU TRÚC DỮ LIỆU (4 TRƯỜNG) ---
+// --- CẤU TRÚC DỮ LIỆU ---
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct AccountStore {
     accounts: HashMap<String, (String, String, String, String)>,
@@ -50,7 +50,6 @@ fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: Str
     let mc = new_magic_crypt!(SECRET_KEY, 256);
     let encrypted_pass = mc.encrypt_str_to_base64(&pass);
     
-    // Ghi đè thông tin
     store.accounts.insert(domain, (user, encrypted_pass, cap, truong));
     save_store(app, &store)?;
     Ok("Đã lưu thành công!".to_string())
@@ -116,7 +115,7 @@ async fn navigate_webview(app: AppHandle, url: String) {
     }
 }
 
-// --- LOGIC MỚI: HOOK ASP.NET POSTBACK ---
+// --- LOGIC INJECTOR: MONKEY PATCHING ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -136,21 +135,16 @@ async fn open_secure_window(app: AppHandle, url: String) {
 
     let init_script = format!(r#"
         window.addEventListener('DOMContentLoaded', () => {{
-            console.log("🔥 NSL Injector v9: ASP.NET Hook Activated");
-            
-            // DỮ LIỆU CẦN ĐIỀN
+            console.log("🔥 NSL Injector v10: ASP.NET Override");
             const data = {{ u: "{}", p: "{}", c: "{}", t: "{}" }};
-
-            // ID CHÍNH XÁC CỦA TRANG WEB (Theo bạn cung cấp)
             const IDS = {{
                 user: "ContentPlaceHolder1_tbU",
                 pass: "ContentPlaceHolder1_tbP",
                 cap: "ctl00_ContentPlaceHolder1_cbCapHoc_Input",
-                truong: "ctl00_ContentPlaceHolder1_cbTruong_Input",
-                btn: "ContentPlaceHolder1_btOK"
+                truong: "ctl00_ContentPlaceHolder1_cbTruong_Input"
             }};
 
-            // 1. TỰ ĐỘNG ĐIỀN DỮ LIỆU
+            // 1. TỰ ĐỘNG ĐIỀN
             function autoFill() {{
                 // Tab
                 let spans = document.querySelectorAll('.rtsTxt');
@@ -168,7 +162,6 @@ async fn open_secure_window(app: AppHandle, url: String) {
                     let el = document.getElementById(id);
                     if (el && el.value !== val) {{
                         el.value = val;
-                        // Trigger đủ các loại sự kiện để web nhận biết
                         el.dispatchEvent(new Event('input', {{bubbles:true}}));
                         el.dispatchEvent(new Event('change', {{bubbles:true}}));
                         el.dispatchEvent(new Event('blur', {{bubbles:true}}));
@@ -181,62 +174,54 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 if(data.t) setVal(IDS.truong, data.t);
             }}
 
-            // 2. HÀM GỬI VỀ RUST
-            function sendToRust() {{
-                let u = document.getElementById(IDS.user)?.value || "";
-                let p = document.getElementById(IDS.pass)?.value || "";
-                let c = document.getElementById(IDS.cap)?.value || "";
-                let t = document.getElementById(IDS.truong)?.value || "";
-
-                if (u && p) {{
-                    let u64 = btoa(unescape(encodeURIComponent(u)));
-                    let p64 = btoa(unescape(encodeURIComponent(p)));
-                    let c64 = btoa(unescape(encodeURIComponent(c)));
-                    let t64 = btoa(unescape(encodeURIComponent(t)));
-
-                    // Gửi ngầm qua Iframe, Rust sẽ bắt được qua on_navigation
-                    let iframe = document.createElement('iframe');
-                    iframe.style.display = 'none';
-                    iframe.src = "https://nsl.local/save/" + u64 + "/" + p64 + "/" + c64 + "/" + t64;
-                    document.body.appendChild(iframe);
-                    setTimeout(() => {{ if(iframe) iframe.remove(); }}, 500);
-                    console.log(">> Đã gửi dữ liệu đăng nhập về Rust");
-                }}
-            }}
-
-            // 3. KỸ THUẬT MONKEY PATCHING (QUAN TRỌNG NHẤT)
-            // Ghi đè hàm PostBack của ASP.NET để chặn quá trình đăng nhập
-            function hookPostBack() {{
+            // 2. GHI ĐÈ HÀM POSTBACK CỦA ASP.NET (CHÌA KHÓA VÀNG)
+            // Ta dùng setInterval để canh me khi nào trang web định nghĩa hàm này thì ta cướp luôn
+            let hookAttempts = 0;
+            const hookInterval = setInterval(() => {{
                 if (typeof window.WebForm_DoPostBackWithOptions === 'function' && !window.WebForm_DoPostBackWithOptions.isHooked) {{
-                    const originalPostBack = window.WebForm_DoPostBackWithOptions;
+                    const originalFn = window.WebForm_DoPostBackWithOptions;
                     
+                    // Định nghĩa lại hàm hệ thống
                     window.WebForm_DoPostBackWithOptions = function(options) {{
-                        console.log(">> Phát hiện lệnh Đăng nhập -> Tạm dừng để lưu dữ liệu...");
+                        console.log(">> NSL: Đã chặn lệnh đăng nhập!");
                         
-                        // 1. Gửi dữ liệu đi trước
-                        sendToRust();
+                        // A. LẤY DỮ LIỆU
+                        let u = document.getElementById(IDS.user)?.value || "";
+                        let p = document.getElementById(IDS.pass)?.value || "";
+                        let c = document.getElementById(IDS.cap)?.value || "";
+                        let t = document.getElementById(IDS.truong)?.value || "";
 
-                        // 2. Chờ 300ms rồi mới thực hiện lệnh gốc của trang web
+                        if (u && p) {{
+                            // B. GỬI VỀ RUST (Dùng window.location để chắc chắn bắt được)
+                            let u64 = btoa(unescape(encodeURIComponent(u)));
+                            let p64 = btoa(unescape(encodeURIComponent(p)));
+                            let c64 = btoa(unescape(encodeURIComponent(c)));
+                            let t64 = btoa(unescape(encodeURIComponent(t)));
+                            
+                            // Điều hướng ảo -> Rust sẽ bắt và chặn lại, không ảnh hưởng trang web
+                            window.location.href = "https://nsl.local/save/" + u64 + "/" + p64 + "/" + c64 + "/" + t64;
+                        }}
+
+                        // C. CHỜ 200MS RỒI TRẢ LẠI LỆNH GỐC
                         setTimeout(() => {{
-                            console.log(">> Tiếp tục đăng nhập...");
-                            originalPostBack(options);
-                        }}, 300);
+                            console.log(">> NSL: Thả lệnh đăng nhập đi tiếp...");
+                            originalFn(options);
+                        }}, 200);
                     }};
+                    
                     window.WebForm_DoPostBackWithOptions.isHooked = true;
-                    console.log(">> Đã móc nối thành công vào hệ thống đăng nhập");
+                    console.log(">> NSL: Đã Hook thành công WebForm_DoPostBackWithOptions");
+                    clearInterval(hookInterval);
                 }}
-            }}
+                
+                hookAttempts++;
+                if(hookAttempts > 100) clearInterval(hookInterval); // Bỏ cuộc sau 10s
+            }}, 100);
 
-            // CHẠY LIÊN TỤC
-            const observer = new MutationObserver(() => {{
-                autoFill();
-                hookPostBack(); // Liên tục kiểm tra để móc hàm nếu trang web load lại AJAX
-            }});
+            // Chạy autofill liên tục phòng khi web load lại
+            const observer = new MutationObserver(() => autoFill());
             observer.observe(document.body, {{ childList: true, subtree: true }});
-            
-            // Chạy ngay lần đầu
             autoFill();
-            hookPostBack();
         }});
     "#, u_v, p_v, c_v, t_v);
 
@@ -265,7 +250,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
                      
                      let _ = perform_save_account(&app_handle_clone, target_domain.clone(), u, p, c, t);
                  }
-                 return false; // Chặn không cho chuyển trang
+                 return false; // QUAN TRỌNG: Chặn điều hướng ảo, giữ nguyên trang đăng nhập
              }
              true
         })
