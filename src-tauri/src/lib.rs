@@ -44,7 +44,7 @@ fn load_store(app: &AppHandle) -> AccountStore {
     // Đọc chuẩn
     if let Ok(store) = serde_json::from_str::<AccountStore>(&data) { return store; }
     
-    // Đọc cũ và nâng cấp
+    // Nâng cấp dữ liệu cũ
     #[derive(Deserialize)] struct OldStore4 { accounts: HashMap<String, (String, String, String, String)> }
     #[derive(Deserialize)] struct OldStore2 { accounts: HashMap<String, (String, String)> }
     
@@ -76,6 +76,7 @@ fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: Str
     let new_acc = AccountData { user: user.clone(), pass: encrypted_pass, cap, truong };
     let list = store.accounts.entry(domain).or_insert(Vec::new());
 
+    // Cập nhật nếu trùng User, ngược lại thêm mới
     if let Some(existing) = list.iter_mut().find(|a| a.user == user) {
         *existing = new_acc;
     } else {
@@ -155,7 +156,7 @@ async fn navigate_webview(app: AppHandle, url: String) {
     }
 }
 
-// --- INJECTOR V14 (IMAGE PING & ACTIVE CHECK) ---
+// --- INJECTOR V15 (QUAY VỀ BẢN CHẤT - KHÔNG CAN THIỆP) ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -181,7 +182,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
 
     let init_script = format!(r#"
         window.addEventListener('DOMContentLoaded', () => {{
-            console.log("🔥 NSL Stealth Injector v14");
+            console.log("🔥 NSL Native-Passive V15");
             const accounts = {}; 
             const IDS = {{
                 user: "ContentPlaceHolder1_tbU",
@@ -191,31 +192,36 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 btn: "ContentPlaceHolder1_btOK"
             }};
 
-            // 1. ĐIỀN THÔNG MINH (TRÁNH GHI ĐÈ KHI ĐANG GÕ)
+            // 1. HÀM ĐIỀN (TUÂN THỦ QUY TRÌNH TELERIK: FOCUS -> NHẬP -> BLUR)
             function fillAccount(acc) {{
                 if (!acc) return;
                 const setVal = (id, val, force) => {{
                     let el = document.getElementById(id);
                     if (el) {{
-                        // QUAN TRỌNG: Nếu người dùng đang focus vào ô này thì KHÔNG ĐIỀN TỰ ĐỘNG
+                        // Nếu đang gõ phím thì không điền (tránh xung đột)
                         if (document.activeElement === el && !force) return;
 
-                        // Chỉ điền khi ô trống hoặc có lệnh force (từ menu chọn)
+                        // Chỉ điền khi ô trống hoặc có lệnh force
                         if (force || !el.value) {{
+                            el.focus(); // Quan trọng cho Telerik
                             el.value = val;
                             el.dispatchEvent(new Event('input', {{bubbles:true}}));
                             el.dispatchEvent(new Event('change', {{bubbles:true}}));
-                            el.dispatchEvent(new Event('blur', {{bubbles:true}}));
+                            el.blur();  // Quan trọng để trigger validation
                         }}
                     }}
                 }};
-                setVal(IDS.user, acc.u, true); // User chọn thì force
+                
+                // Điền lần lượt
+                setVal(IDS.user, acc.u, true);
                 setVal(IDS.pass, acc.p, true);
-                if(acc.c) setVal(IDS.cap, acc.c, true);
-                if(acc.t) setVal(IDS.truong, acc.t, true);
+                
+                // Với Cấp và Trường, delay nhẹ 1 chút để đảm bảo UI kịp phản hồi
+                if(acc.c) setTimeout(() => setVal(IDS.cap, acc.c, true), 100);
+                if(acc.t) setTimeout(() => setVal(IDS.truong, acc.t, true), 200);
             }}
 
-            // 2. MENU CHỌN
+            // 2. MENU CHỌN TÀI KHOẢN (GIỮ NGUYÊN)
             function createAccountSelector(targetInput) {{
                 let old = document.getElementById('nsl-acc-selector'); if(old) old.remove();
                 let div = document.createElement('div');
@@ -242,12 +248,17 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 div.style.left = (rect.left + window.scrollX) + 'px';
                 div.style.width = rect.width + 'px';
                 document.body.appendChild(div);
+                
                 const close = (e) => {{ if (!div.contains(e.target) && e.target !== targetInput) {{ div.remove(); document.removeEventListener('click', close); }} }};
                 setTimeout(() => document.addEventListener('click', close), 100);
             }}
 
-            // 3. AUTO FILL LOOP
+            // 3. LOGIC KHỞI TẠO (CHẠY 1 LẦN)
+            let isInit = false;
             function initAutoFill() {{
+                if(isInit) return;
+                
+                // Auto Click Tab
                 let spans = document.querySelectorAll('.rtsTxt');
                 for (let s of spans) {{
                     if (s.innerText.trim() === "Tài khoản QLTH") {{
@@ -258,11 +269,12 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 }}
 
                 let uIn = document.getElementById(IDS.user);
-                if (uIn && !uIn.hasAttribute('data-nsl-init')) {{
+                if (uIn) {{
+                    isInit = true;
                     uIn.setAttribute('data-nsl-init', 'true');
                     
                     if (accounts.length === 1 && !uIn.value) {{
-                        fillAccount(accounts[0]); 
+                        fillAccount(accounts[0]);
                     }} else if (accounts.length > 0) {{
                         uIn.addEventListener('click', () => createAccountSelector(uIn));
                         uIn.addEventListener('focus', () => createAccountSelector(uIn));
@@ -271,31 +283,40 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 }}
             }}
 
-            // 4. BẮT SỰ KIỆN LƯU (IMAGE PING - KHÔNG IFRAME)
-            let btn = document.getElementById(IDS.btn);
-            if(btn && !btn.hasAttribute('data-nsl-capture')) {{
-                btn.setAttribute('data-nsl-capture', 'true');
-                btn.addEventListener('mousedown', () => {{
-                    let u = document.getElementById(IDS.user)?.value || "";
-                    let p = document.getElementById(IDS.pass)?.value || "";
-                    let c = document.getElementById(IDS.cap)?.value || "";
-                    let t = document.getElementById(IDS.truong)?.value || "";
+            // 4. BẮT SỰ KIỆN LƯU (PASSIVE MODE - TUYỆT ĐỐI KHÔNG CHẶN)
+            // Ta dùng sự kiện 'mousedown' để lấy dữ liệu trước khi nút click được xử lý
+            // Nhưng ta KHÔNG dùng preventDefault(), để trang web tự nhiên
+            function attachCapture() {{
+                let btn = document.getElementById(IDS.btn);
+                if(btn && !btn.hasAttribute('data-nsl-capture')) {{
+                    btn.setAttribute('data-nsl-capture', 'true');
+                    
+                    btn.addEventListener('mousedown', () => {{
+                        let u = document.getElementById(IDS.user)?.value || "";
+                        let p = document.getElementById(IDS.pass)?.value || "";
+                        let c = document.getElementById(IDS.cap)?.value || "";
+                        let t = document.getElementById(IDS.truong)?.value || "";
 
-                    if (u && p) {{
-                        let u64 = btoa(unescape(encodeURIComponent(u)));
-                        let p64 = btoa(unescape(encodeURIComponent(p)));
-                        let c64 = btoa(unescape(encodeURIComponent(c)));
-                        let t64 = btoa(unescape(encodeURIComponent(t)));
-                        
-                        // DÙNG IMAGE PING: Nhẹ, không block, không chuyển trang
-                        new Image().src = "https://nsl.local/save/" + u64 + "/" + p64 + "/" + c64 + "/" + t64;
-                    }}
-                }});
+                        if (u && p) {{
+                            console.log(">> NSL: Snapshot data taking...");
+                            let u64 = btoa(unescape(encodeURIComponent(u)));
+                            let p64 = btoa(unescape(encodeURIComponent(p)));
+                            let c64 = btoa(unescape(encodeURIComponent(c)));
+                            let t64 = btoa(unescape(encodeURIComponent(t)));
+                            
+                            // Dùng Image Ping: Gửi dữ liệu đi mà không quan tâm phản hồi
+                            // Cách này đảm bảo 100% không ảnh hưởng luồng chính của web
+                            new Image().src = "https://nsl.local/save/" + u64 + "/" + p64 + "/" + c64 + "/" + t64;
+                        }}
+                    }});
+                }}
             }}
 
-            const obs = new MutationObserver(() => initAutoFill());
+            // Chạy liên tục để bắt DOM load
+            const obs = new MutationObserver(() => {{ initAutoFill(); attachCapture(); }});
             obs.observe(document.body, {{ childList: true, subtree: true }});
-            initAutoFill();
+            // Chạy ngay
+            setTimeout(() => {{ initAutoFill(); attachCapture(); }}, 500);
         }});
     "#, accounts_json);
 
@@ -322,7 +343,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
                      let t = String::from_utf8(general_purpose::STANDARD.decode(p[7]).unwrap_or_default()).unwrap_or_default();
                      let _ = perform_save_account(&app_handle, domain_key.clone(), u, pass, c, t);
                  }
-                 return false; // Chỉ chặn request ảo
+                 return false; // Chặn request ảo
              }
              true
         })
