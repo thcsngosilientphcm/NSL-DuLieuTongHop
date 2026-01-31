@@ -41,12 +41,10 @@ fn load_store(app: &AppHandle) -> AccountStore {
     
     let data = fs::read_to_string(&path).unwrap_or_default();
     
-    // Logic tự động nâng cấp dữ liệu cũ (Migration)
-    if let Ok(store) = serde_json::from_str::<AccountStore>(&data) {
-        return store;
-    }
+    // Đọc chuẩn
+    if let Ok(store) = serde_json::from_str::<AccountStore>(&data) { return store; }
     
-    // Nếu đọc lỗi -> Thử format cũ để convert
+    // Đọc cũ và nâng cấp
     #[derive(Deserialize)] struct OldStore4 { accounts: HashMap<String, (String, String, String, String)> }
     #[derive(Deserialize)] struct OldStore2 { accounts: HashMap<String, (String, String)> }
     
@@ -157,7 +155,7 @@ async fn navigate_webview(app: AppHandle, url: String) {
     }
 }
 
-// --- INJECTOR V11 (FIX LỖI LOGIN & GHI ĐÈ) ---
+// --- INJECTOR V14 (IMAGE PING & ACTIVE CHECK) ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -171,7 +169,6 @@ async fn open_secure_window(app: AppHandle, url: String) {
         let mut items = Vec::new();
         for acc in list {
             let p_dec = mc.decrypt_base64_to_string(&acc.pass).unwrap_or_default();
-            // Escape json safe
             items.push(format!(r#"{{"u":"{}","p":"{}","c":"{}","t":"{}"}}"#, 
                 acc.user.replace("\\", "\\\\").replace("\"", "\\\""), 
                 p_dec.replace("\\", "\\\\").replace("\"", "\\\""), 
@@ -184,22 +181,26 @@ async fn open_secure_window(app: AppHandle, url: String) {
 
     let init_script = format!(r#"
         window.addEventListener('DOMContentLoaded', () => {{
-            console.log("🔥 NSL Safe-Injector v11");
+            console.log("🔥 NSL Stealth Injector v14");
             const accounts = {}; 
             const IDS = {{
                 user: "ContentPlaceHolder1_tbU",
                 pass: "ContentPlaceHolder1_tbP",
                 cap: "ctl00_ContentPlaceHolder1_cbCapHoc_Input",
-                truong: "ctl00_ContentPlaceHolder1_cbTruong_Input"
+                truong: "ctl00_ContentPlaceHolder1_cbTruong_Input",
+                btn: "ContentPlaceHolder1_btOK"
             }};
 
-            // 1. HÀM ĐIỀN (CHỈ ĐIỀN KHI TRỐNG HOẶC USER CHỌN)
+            // 1. ĐIỀN THÔNG MINH (TRÁNH GHI ĐÈ KHI ĐANG GÕ)
             function fillAccount(acc) {{
                 if (!acc) return;
                 const setVal = (id, val, force) => {{
                     let el = document.getElementById(id);
                     if (el) {{
-                        // QUAN TRỌNG: Chỉ điền nếu ô đang trống HOẶC người dùng ép buộc (chọn từ menu)
+                        // QUAN TRỌNG: Nếu người dùng đang focus vào ô này thì KHÔNG ĐIỀN TỰ ĐỘNG
+                        if (document.activeElement === el && !force) return;
+
+                        // Chỉ điền khi ô trống hoặc có lệnh force (từ menu chọn)
                         if (force || !el.value) {{
                             el.value = val;
                             el.dispatchEvent(new Event('input', {{bubbles:true}}));
@@ -208,13 +209,13 @@ async fn open_secure_window(app: AppHandle, url: String) {
                         }}
                     }}
                 }};
-                setVal(IDS.user, acc.u, true);
+                setVal(IDS.user, acc.u, true); // User chọn thì force
                 setVal(IDS.pass, acc.p, true);
                 if(acc.c) setVal(IDS.cap, acc.c, true);
                 if(acc.t) setVal(IDS.truong, acc.t, true);
             }}
 
-            // 2. MENU CHỌN TÀI KHOẢN
+            // 2. MENU CHỌN
             function createAccountSelector(targetInput) {{
                 let old = document.getElementById('nsl-acc-selector'); if(old) old.remove();
                 let div = document.createElement('div');
@@ -241,14 +242,12 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 div.style.left = (rect.left + window.scrollX) + 'px';
                 div.style.width = rect.width + 'px';
                 document.body.appendChild(div);
-                
                 const close = (e) => {{ if (!div.contains(e.target) && e.target !== targetInput) {{ div.remove(); document.removeEventListener('click', close); }} }};
                 setTimeout(() => document.addEventListener('click', close), 100);
             }}
 
-            // 3. TỰ ĐỘNG CHẠY KHI MỞ TRANG
+            // 3. AUTO FILL LOOP
             function initAutoFill() {{
-                // Click Tab QLTH
                 let spans = document.querySelectorAll('.rtsTxt');
                 for (let s of spans) {{
                     if (s.innerText.trim() === "Tài khoản QLTH") {{
@@ -263,10 +262,8 @@ async fn open_secure_window(app: AppHandle, url: String) {
                     uIn.setAttribute('data-nsl-init', 'true');
                     
                     if (accounts.length === 1 && !uIn.value) {{
-                        // Chỉ 1 tài khoản và ô đang trống -> Điền luôn
-                        fillAccount(accounts[0]);
+                        fillAccount(accounts[0]); 
                     }} else if (accounts.length > 0) {{
-                        // Nhiều tài khoản -> Gắn sự kiện hiện menu
                         uIn.addEventListener('click', () => createAccountSelector(uIn));
                         uIn.addEventListener('focus', () => createAccountSelector(uIn));
                         if(!uIn.value) createAccountSelector(uIn);
@@ -274,49 +271,31 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 }}
             }}
 
-            // 4. HOOK HÀM POSTBACK (SỬA LỖI WINDOW.LOCATION)
-            function hookPostBack() {{
-                if (typeof window.WebForm_DoPostBackWithOptions === 'function' && !window.WebForm_DoPostBackWithOptions.isHooked) {{
-                    const originalFn = window.WebForm_DoPostBackWithOptions;
-                    window.WebForm_DoPostBackWithOptions = function(options) {{
-                        console.log(">> NSL: Intercepting Login...");
-                        
-                        // Lấy dữ liệu hiện tại trên form (kể cả khi user nhập tay)
-                        let u = document.getElementById(IDS.user)?.value || "";
-                        let p = document.getElementById(IDS.pass)?.value || "";
-                        let c = document.getElementById(IDS.cap)?.value || "";
-                        let t = document.getElementById(IDS.truong)?.value || "";
+            // 4. BẮT SỰ KIỆN LƯU (IMAGE PING - KHÔNG IFRAME)
+            let btn = document.getElementById(IDS.btn);
+            if(btn && !btn.hasAttribute('data-nsl-capture')) {{
+                btn.setAttribute('data-nsl-capture', 'true');
+                btn.addEventListener('mousedown', () => {{
+                    let u = document.getElementById(IDS.user)?.value || "";
+                    let p = document.getElementById(IDS.pass)?.value || "";
+                    let c = document.getElementById(IDS.cap)?.value || "";
+                    let t = document.getElementById(IDS.truong)?.value || "";
 
-                        if (u && p) {{
-                            let u64 = btoa(unescape(encodeURIComponent(u)));
-                            let p64 = btoa(unescape(encodeURIComponent(p)));
-                            let c64 = btoa(unescape(encodeURIComponent(c)));
-                            let t64 = btoa(unescape(encodeURIComponent(t)));
-                            
-                            // DÙNG IFRAME ĐỂ GỬI (KHÔNG DÙNG WINDOW.LOCATION)
-                            let iframe = document.createElement('iframe');
-                            iframe.style.display = 'none';
-                            iframe.src = "https://nsl.local/save/" + u64 + "/" + p64 + "/" + c64 + "/" + t64;
-                            document.body.appendChild(iframe);
-                            
-                            // Xóa iframe sau 1s
-                            setTimeout(() => {{ if(iframe) iframe.remove(); }}, 1000);
-                        }}
+                    if (u && p) {{
+                        let u64 = btoa(unescape(encodeURIComponent(u)));
+                        let p64 = btoa(unescape(encodeURIComponent(p)));
+                        let c64 = btoa(unescape(encodeURIComponent(c)));
+                        let t64 = btoa(unescape(encodeURIComponent(t)));
                         
-                        // Gọi hàm gốc ngay sau đó để web tiếp tục đăng nhập
-                        // Không dùng setTimeout quá lâu tránh lag
-                        originalFn(options);
-                    }};
-                    window.WebForm_DoPostBackWithOptions.isHooked = true;
-                }}
+                        // DÙNG IMAGE PING: Nhẹ, không block, không chuyển trang
+                        new Image().src = "https://nsl.local/save/" + u64 + "/" + p64 + "/" + c64 + "/" + t64;
+                    }}
+                }});
             }}
 
-            // Chạy liên tục để bắt sự thay đổi DOM (do ASP.NET hay vẽ lại)
-            const obs = new MutationObserver(() => {{ initAutoFill(); hookPostBack(); }});
+            const obs = new MutationObserver(() => initAutoFill());
             obs.observe(document.body, {{ childList: true, subtree: true }});
-            
             initAutoFill();
-            hookPostBack();
         }});
     "#, accounts_json);
 
@@ -343,7 +322,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
                      let t = String::from_utf8(general_purpose::STANDARD.decode(p[7]).unwrap_or_default()).unwrap_or_default();
                      let _ = perform_save_account(&app_handle, domain_key.clone(), u, pass, c, t);
                  }
-                 return false; // Chặn iframe ảo
+                 return false; // Chỉ chặn request ảo
              }
              true
         })
