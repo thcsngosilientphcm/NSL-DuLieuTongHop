@@ -8,33 +8,15 @@ use base64::{engine::general_purpose, Engine as _};
 
 // --- DATA STRUCTURES (Giữ nguyên) ---
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct AccountData {
-    user: String,
-    pass: String,
-    cap: String,
-    truong: String,
-}
-
+struct AccountData { user: String, pass: String, cap: String, truong: String }
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct AccountStore {
-    accounts: HashMap<String, Vec<AccountData>>,
-}
-
+struct AccountStore { accounts: HashMap<String, Vec<AccountData>> }
 #[derive(Serialize)]
-struct AccountDTO {
-    domain: String,
-    username: String,
-    cap: String,
-    truong: String,
-}
-
+struct AccountDTO { domain: String, username: String, cap: String, truong: String }
 const SECRET_KEY: &str = "NSL_SECURE_KEY_2026_HCM"; 
 
 // --- HELPER FUNCTIONS (Giữ nguyên) ---
-fn get_creds_path(app: &AppHandle) -> PathBuf {
-    app.path().app_data_dir().unwrap().join("creds.json")
-}
-
+fn get_creds_path(app: &AppHandle) -> PathBuf { app.path().app_data_dir().unwrap().join("creds.json") }
 fn load_store(app: &AppHandle) -> AccountStore {
     let path = get_creds_path(app);
     if !path.exists() { return AccountStore { accounts: HashMap::new() }; }
@@ -42,64 +24,36 @@ fn load_store(app: &AppHandle) -> AccountStore {
     if let Ok(store) = serde_json::from_str::<AccountStore>(&data) { return store; }
     AccountStore { accounts: HashMap::new() }
 }
-
 fn save_store(app: &AppHandle, store: &AccountStore) -> Result<(), String> {
     let path = get_creds_path(app);
     if let Some(parent) = path.parent() { let _ = fs::create_dir_all(parent); }
     let json = serde_json::to_string_pretty(store).map_err(|e| e.to_string())?;
-    fs::write(path, json).map_err(|e| e.to_string())?;
-    Ok(())
+    fs::write(path, json).map_err(|e| e.to_string())?; Ok(())
 }
-
 fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: String, cap: String, truong: String) -> Result<String, String> {
     let mut store = load_store(app);
     let mc = new_magic_crypt!(SECRET_KEY, 256);
     let encrypted_pass = mc.encrypt_str_to_base64(&pass);
-    
     let new_acc = AccountData { user: user.clone(), pass: encrypted_pass, cap, truong };
     let list = store.accounts.entry(domain).or_insert(Vec::new());
-
-    if let Some(existing) = list.iter_mut().find(|a| a.user == user) {
-        *existing = new_acc;
-    } else {
-        list.push(new_acc);
-    }
-
-    save_store(app, &store)?;
-    Ok("Lưu thành công".to_string())
+    if let Some(existing) = list.iter_mut().find(|a| a.user == user) { *existing = new_acc; } else { list.push(new_acc); }
+    save_store(app, &store)?; Ok("OK".to_string())
 }
 
 // --- COMMANDS (Giữ nguyên) ---
-#[tauri::command]
-fn get_all_accounts(app: AppHandle) -> Vec<AccountDTO> {
+#[tauri::command] fn get_all_accounts(app: AppHandle) -> Vec<AccountDTO> {
     let store = load_store(&app);
     let mut list = Vec::new();
-    for (d, accs) in store.accounts {
-        for a in accs {
-            list.push(AccountDTO { domain: d.clone(), username: a.user, cap: a.cap, truong: a.truong });
-        }
-    }
+    for (d, accs) in store.accounts { for a in accs { list.push(AccountDTO { domain: d.clone(), username: a.user, cap: a.cap, truong: a.truong }); } }
     list
 }
-
-#[tauri::command]
-fn delete_account(app: AppHandle, domain: String, username: String) -> Result<String, String> {
+#[tauri::command] fn delete_account(app: AppHandle, domain: String, username: String) -> Result<String, String> {
     let mut store = load_store(&app);
-    if let Some(list) = store.accounts.get_mut(&domain) {
-        list.retain(|a| a.user != username);
-        save_store(&app, &store)?;
-        return Ok("Xóa thành công".to_string());
-    }
-    Err("Không tìm thấy".to_string())
+    if let Some(list) = store.accounts.get_mut(&domain) { list.retain(|a| a.user != username); save_store(&app, &store)?; return Ok("OK".to_string()); }
+    Err("ERR".to_string())
 }
-
-#[tauri::command]
-fn save_account(app: AppHandle, domain: String, user: String, pass: String, cap: String, truong: String) -> Result<String, String> {
-    perform_save_account(&app, domain, user, pass, cap, truong)
-}
-
-#[tauri::command]
-fn update_webview_layout(app: AppHandle, sidebar_width: f64) {
+#[tauri::command] fn save_account(app: AppHandle, domain: String, user: String, pass: String, cap: String, truong: String) -> Result<String, String> { perform_save_account(&app, domain, user, pass, cap, truong) }
+#[tauri::command] fn update_webview_layout(app: AppHandle, sidebar_width: f64) {
     if let Some(win) = app.get_webview_window("embedded_browser") {
         if let Some(main) = app.get_webview_window("main") {
             let size = main.inner_size().unwrap();
@@ -108,27 +62,17 @@ fn update_webview_layout(app: AppHandle, sidebar_width: f64) {
         }
     }
 }
+#[tauri::command] fn hide_embedded_view(app: AppHandle) { if let Some(win) = app.get_webview_window("embedded_browser") { let _ = win.close(); } }
+#[tauri::command] async fn navigate_webview(app: AppHandle, url: String) { if let Some(win) = app.get_webview_window("embedded_browser") { let _ = win.eval(&format!("window.location.replace('{}')", url)); } }
 
-#[tauri::command]
-fn hide_embedded_view(app: AppHandle) {
-    if let Some(win) = app.get_webview_window("embedded_browser") { let _ = win.close(); }
-}
-
-#[tauri::command]
-async fn navigate_webview(app: AppHandle, url: String) {
-    if let Some(win) = app.get_webview_window("embedded_browser") {
-        let _ = win.eval(&format!("window.location.replace('{}')", url));
-    }
-}
-
-// --- LOGIC MỚI: SỬA CAPTURE & AUTOFILL ---
+// --- INJECTOR V31: CACHING STRATEGY ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
     let domain = domain_raw.split('/').next().unwrap_or("").to_string();
     let store = load_store(&app);
     let mut accounts_json = String::from("[]");
-
+    
     if let Some(list) = store.accounts.get(&domain) {
         let mc = new_magic_crypt!(SECRET_KEY, 256);
         let mut items = Vec::new();
@@ -152,8 +96,53 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 btn: "ContentPlaceHolder1_btOK"
             }};
 
-            // 1. Logic Chọn Telerik & Postback (Giữ nguyên vì đã tốt)
-            async function triggerTelerik(id, text, delay) {{
+            // BIẾN CACHE: Lưu trữ giá trị liên tục
+            window.nslCache = {{ u: "", p: "", c: "", t: "" }};
+
+            // 1. Logic Đọc dữ liệu (Chạy liên tục)
+            function updateCache() {{
+                // Lấy User/Pass
+                const uVal = document.getElementById(IDS.user)?.value || "";
+                const pVal = document.getElementById(IDS.pass)?.value || "";
+                
+                // Lấy Cấp/Trường (Ưu tiên Telerik API -> Fallback Input DOM)
+                let cVal = "";
+                let tVal = "";
+                
+                if (typeof $find !== 'undefined') {{
+                    const comboC = $find(IDS.cap);
+                    if (comboC) cVal = comboC.get_text();
+                    const comboT = $find(IDS.truong);
+                    if (comboT) tVal = comboT.get_text();
+                }}
+
+                if (!cVal) cVal = document.getElementById(IDS.cap + "_Input")?.value || "";
+                if (!tVal) tVal = document.getElementById(IDS.truong + "_Input")?.value || "";
+
+                // Cập nhật vào Cache
+                if (uVal) window.nslCache.u = uVal;
+                if (pVal) window.nslCache.p = pVal;
+                if (cVal) window.nslCache.c = cVal;
+                if (tVal) window.nslCache.t = tVal;
+            }}
+
+            // 2. Logic Gửi dữ liệu (Dùng Cache)
+            function sendData() {{
+                const {{ u, p, c, t }} = window.nslCache;
+                // Chỉ gửi nếu có user và pass trong cache
+                if (u && p) {{
+                    // Dùng image ping để gửi
+                    const base = "https://nsl.local/save/";
+                    const parts = [u, p, c, t].map(s => btoa(unescape(encodeURIComponent(s))));
+                    new Image().src = base + parts.join("/");
+                    console.log(">> NSL: Data sent from CACHE", {{ u, p, c, t }});
+                }} else {{
+                    console.log(">> NSL: Cache empty, skip saving");
+                }}
+            }}
+
+            // 3. Logic Auto Fill (Sử dụng raise_selectedIndexChanged)
+            async fn triggerTelerik(id, text, delay) {{
                 return new Promise(resolve => {{
                     if (typeof $find === 'undefined' || !text) return resolve();
                     let combo = $find(id);
@@ -169,62 +158,22 @@ async fn open_secure_window(app: AppHandle, url: String) {
             }}
 
             window.smartFill = async (acc) => {{
-                let u = document.getElementById(IDS.user);
-                let p = document.getElementById(IDS.pass);
+                const u = document.getElementById(IDS.user);
+                const p = document.getElementById(IDS.pass);
                 if (u) u.value = acc.u;
                 if (p) p.value = acc.p;
                 await triggerTelerik(IDS.cap, acc.c, 1500);
                 await triggerTelerik(IDS.truong, acc.t, 500);
             }};
 
-            // 2. LOGIC CAPTURE MỚI (MẠNH HƠN)
-            // Thay vì tìm nút, ta lắng nghe sự kiện Click toàn trang
-            document.addEventListener('click', function(e) {{
-                let target = e.target;
-                // Kiểm tra xem cái được click có phải là nút Đăng nhập (hoặc con của nó) không
-                let btn = document.getElementById(IDS.btn);
-                if (btn && (target === btn || btn.contains(target))) {{
-                    
-                    // Lấy User/Pass
-                    let u = document.getElementById(IDS.user)?.value || "";
-                    let p = document.getElementById(IDS.pass)?.value || "";
-                    
-                    // Lấy Cấp/Trường: Thử nhiều cách để chắc chắn lấy được
-                    let c = "", t = "";
-                    
-                    // Cách 1: Thử lấy từ Telerik Object
-                    if (typeof $find !== 'undefined') {{
-                        let comboC = $find(IDS.cap);
-                        if (comboC) c = comboC.get_text();
-                        let comboT = $find(IDS.truong);
-                        if (comboT) t = comboT.get_text();
-                    }}
-
-                    // Cách 2: Nếu Telerik trả về rỗng, lấy từ ô Input hiển thị (Fallback)
-                    if (!c) {{
-                        let el = document.getElementById(IDS.cap + "_Input");
-                        if (el) c = el.value;
-                    }}
-                    if (!t) {{
-                        let el = document.getElementById(IDS.truong + "_Input");
-                        if (el) t = el.value;
-                    }}
-
-                    // Gửi về Rust nếu có đủ User/Pass
-                    if (u && p) {{
-                        let base = "https://nsl.local/save/";
-                        // encodeURIComponent 2 lần để đảm bảo tiếng Việt không bị lỗi
-                        let parts = [u, p, c, t].map(s => btoa(unescape(encodeURIComponent(s))));
-                        
-                        // Kỹ thuật Image Beacon để gửi request kể cả khi trang chuyển hướng
-                        new Image().src = base + parts.join("/");
-                    }}
-                }}
-            }}, true); // 'true' để bắt sự kiện ở pha Capture (sớm nhất)
-
+            // 4. MAIN LOOP
             let isAutoFilled = false;
+            
             setInterval(() => {{
-                // 3. Auto Tab (Giữ nguyên)
+                // A. Cập nhật Cache liên tục (Mỗi 500ms)
+                updateCache();
+
+                // B. Auto Tab
                 document.querySelectorAll('.rtsTxt').forEach(s => {{
                     if (s.innerText.trim() === "Tài khoản QLTH") {{
                         let link = s.closest('a.rtsLink');
@@ -232,16 +181,16 @@ async fn open_secure_window(app: AppHandle, url: String) {
                     }}
                 }});
 
-                // 4. Menu & Auto-fill (Giữ nguyên)
-                let uIn = document.getElementById(IDS.user);
+                // C. Auto Fill & Menu
+                const uIn = document.getElementById(IDS.user);
                 if (uIn) {{
                     if (!uIn.dataset.hook) {{
                         uIn.dataset.hook = "true";
                         uIn.onclick = (e) => {{
                             e.stopPropagation();
-                            let old = document.getElementById('nsl-m'); if (old) old.remove();
+                            let old = document.getElementById('nsl-menu'); if (old) old.remove();
                             let m = document.createElement('div');
-                            m.id = 'nsl-m';
+                            m.id = 'nsl-menu';
                             m.style.cssText = 'position:absolute;z-index:9999;background:#1e293b;border:1px solid #475569;border-radius:4px;padding:4px;color:white;min-width:200px;';
                             accounts.forEach(a => {{
                                 let i = document.createElement('div');
@@ -261,7 +210,31 @@ async fn open_secure_window(app: AppHandle, url: String) {
                         isAutoFilled = true;
                     }}
                 }}
-            }}, 1000);
+            }}, 500);
+
+            // 5. TRIGGER SAVE (Bắt sự kiện Click toàn cục)
+            document.addEventListener('click', (e) => {{
+                const btn = document.getElementById(IDS.btn);
+                // Nếu click trúng nút login hoặc con của nó
+                if (btn && (e.target === btn || btn.contains(e.target))) {{
+                    // Cập nhật cache lần cuối cho chắc chắn
+                    updateCache();
+                    // Gửi dữ liệu từ cache
+                    sendData();
+                }}
+            }}, true);
+
+            // Trigger Save khi nhấn Enter ở ô mật khẩu
+            document.addEventListener('keydown', (e) => {{
+                if (e.key === 'Enter') {{
+                    const pIn = document.getElementById(IDS.pass);
+                    if (document.activeElement === pIn) {{
+                        updateCache();
+                        sendData();
+                    }}
+                }}
+            }}, true);
+
         }})();
     "#, accounts_json);
 
