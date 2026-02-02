@@ -97,63 +97,103 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 truong: "ctl00_ContentPlaceHolder1_cbTruong"
             }};
 
-            function forceSelect(comboId, textValue, callback) {{
-                if (typeof $find === 'undefined' || !textValue) return;
-                const combo = $find(comboId);
-                if (!combo) return;
-                
-                combo.showDropDown();
-                setTimeout(() => {{
+            // HÀM CHỌN GIÁ TRỊ VÀ KÍCH HOẠT SERVER LOAD
+            function triggerTelerik(comboId, textValue, delayAfter) {{
+                return new Promise((resolve) => {{
+                    if (typeof $find === 'undefined') return resolve();
+                    const combo = $find(comboId);
+                    if (!combo) return resolve();
+
+                    console.log(">> Triggering:", comboId, textValue);
+                    
                     const item = combo.findItemByText(textValue);
                     if (item) {{
-                        item.select(); // Chọn logic
-                        item.get_element().click(); // Giả lập click vật lý để trigger postback
+                        item.select(); 
+                        // Kích hoạt sự kiện thay đổi để Web thực hiện Postback
+                        if (combo.raise_selectedIndexChanged) {{
+                            combo.raise_selectedIndexChanged();
+                        }}
+                    }} else {{
+                        combo.set_text(textValue);
                     }}
-                    combo.hideDropDown();
-                    if (callback) callback();
-                }}, 400);
+
+                    setTimeout(() => resolve(), delayAfter || 500);
+                }});
             }}
 
-            window.smartFill = (acc) => {{
+            window.smartFill = async (acc) => {{
+                if (!acc) return;
+                console.log(">> Start smartFill for:", acc.u);
+                
+                // 1. Điền User & Pass
                 const u = document.getElementById(IDS.user);
                 const p = document.getElementById(IDS.pass);
-                if (u) u.value = acc.u;
-                if (p) p.value = acc.p;
+                if (u) {{ u.value = acc.u; u.dispatchEvent(new Event('input', {{bubbles:true}})); }}
+                if (p) {{ p.value = acc.p; p.dispatchEvent(new Event('input', {{bubbles:true}})); }}
 
-                forceSelect(IDS.cap, acc.c, () => {{
-                    setTimeout(() => {{ forceSelect(IDS.truong, acc.t); }}, 1500);
-                }});
+                // 2. Điền Cấp học & đợi Postback (1.5s)
+                await triggerTelerik(IDS.cap, acc.c, 1500);
+
+                // 3. Điền Trường học
+                await triggerTelerik(IDS.truong, acc.t, 500);
+                console.log(">> Fill complete");
             }};
 
-            setInterval(() => {{
+            let isAutoFilled = false;
+            let tabRetries = 0;
+
+            const mainLoop = () => {{
+                // A. CHUYỂN TAB
                 const spans = document.querySelectorAll('.rtsTxt');
+                let foundTab = false;
                 for (let s of spans) {{
                     if (s.innerText.trim() === "Tài khoản QLTH") {{
+                        foundTab = true;
                         const link = s.closest('a.rtsLink');
-                        if (link && !link.classList.contains('rtsSelected')) link.click();
+                        if (link && !link.classList.contains('rtsSelected')) {{
+                            link.click();
+                            return; // Dừng lại để trang load tab mới
+                        }}
                     }}
                 }}
+
+                // B. KIỂM TRA INPUT VÀ AUTO-FILL
                 const uIn = document.getElementById(IDS.user);
-                if (uIn && !uIn.dataset.hook) {{
-                    uIn.dataset.hook = "true";
-                    uIn.addEventListener('click', (e) => {{
-                        e.stopPropagation();
-                        let menu = document.getElementById('nsl-menu');
-                        if (menu) menu.remove();
-                        menu = document.createElement('div');
-                        menu.id = 'nsl-menu';
-                        menu.style.cssText = 'position:absolute;z-index:999999;background:#1e293b;border:1px solid #475569;border-radius:6px;padding:6px;min-width:250px;color:white;top:'+(uIn.getBoundingClientRect().bottom + window.scrollY + 5)+'px;left:'+(uIn.getBoundingClientRect().left + window.scrollX)+'px;';
-                        accounts.forEach(a => {{
-                            const item = document.createElement('div');
-                            item.innerHTML = `<b>${{a.u}}</b><br><small>${{a.t}}</small>`;
-                            item.style.cssText = 'padding:8px;cursor:pointer;border-radius:4px;';
-                            item.onmousedown = (ev) => {{ ev.preventDefault(); window.smartFill(a); menu.remove(); }};
-                            menu.appendChild(item);
+                if (uIn) {{
+                    // Gắn menu chọn TK
+                    if (!uIn.dataset.hook) {{
+                        uIn.dataset.hook = "true";
+                        uIn.addEventListener('click', (e) => {{
+                            e.stopPropagation();
+                            let menu = document.getElementById('nsl-menu');
+                            if (menu) menu.remove();
+                            menu = document.createElement('div');
+                            menu.id = 'nsl-menu';
+                            menu.style.cssText = 'position:absolute;z-index:999999;background:#1e293b;border:1px solid #475569;border-radius:6px;padding:6px;min-width:250px;color:white;top:'+(uIn.getBoundingClientRect().bottom + window.scrollY + 5)+'px;left:'+(uIn.getBoundingClientRect().left + window.scrollX)+'px;';
+                            accounts.forEach(a => {{
+                                const item = document.createElement('div');
+                                item.innerHTML = `<b>${{a.u}}</b><br><small style="color:#94a3b8">${{a.t}}</small>`;
+                                item.style.cssText = 'padding:8px;cursor:pointer;border-radius:4px;border-bottom:1px solid #334155;';
+                                item.onmousedown = (ev) => {{ ev.preventDefault(); window.smartFill(a); menu.remove(); }};
+                                menu.appendChild(item);
+                            }});
+                            document.body.appendChild(menu);
                         }});
-                        document.body.appendChild(menu);
-                    }});
+                    }}
+
+                    // AUTO FILL TÀI KHOẢN ĐẦU TIÊN
+                    if (!isAutoFilled && accounts.length > 0) {{
+                        // Chỉ auto-fill khi Telerik đã sẵn sàng
+                        if (typeof $find !== 'undefined' && $find(IDS.cap)) {{
+                            console.log(">> Auto-filling first account...");
+                            window.smartFill(accounts[0]);
+                            isAutoFilled = true;
+                        }}
+                    }}
                 }}
-            }}, 1000);
+            }};
+
+            setInterval(mainLoop, 1000);
         }})();
     "#, accounts_json);
 
@@ -161,7 +201,6 @@ async fn open_secure_window(app: AppHandle, url: String) {
     let main = app.get_webview_window("main").unwrap();
     let size = main.inner_size().unwrap();
     
-    // SỬA LỖI TẠI ĐÂY: Clone app và domain trước khi đưa vào closure
     let app_handle = app.clone();
     let domain_captured = domain.clone();
 
@@ -174,7 +213,6 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 let p: Vec<&str> = u.as_str().split('/').collect();
                 if p.len() >= 8 {
                     let decode = |idx: usize| String::from_utf8(general_purpose::STANDARD.decode(p[idx]).unwrap_or_default()).unwrap_or_default();
-                    // Sử dụng app_handle đã clone
                     let _ = perform_save_account(&app_handle, domain_captured.clone(), decode(4), decode(5), decode(6), decode(7));
                 }
                 return false;

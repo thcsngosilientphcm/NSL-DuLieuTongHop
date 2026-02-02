@@ -1,6 +1,6 @@
 {
   "productName": "NSL-DuLieuTongHop",
-  "version": "1.0.27",
+  "version": "1.0.28",
   "identifier": "com.nsl.dulieutonghop",
   "build": {
     "beforeDevCommand": "npm run dev",
