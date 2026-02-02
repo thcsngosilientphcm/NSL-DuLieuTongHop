@@ -150,7 +150,7 @@ async fn navigate_webview(app: AppHandle, url: String) {
     }
 }
 
-// --- INJECTOR V22: CORRECT TAB LOGIC + TELERIK SELECTION ---
+// --- INJECTOR V23: SEQUENTIAL LOADING (Cấp -> Wait -> Trường) ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -176,75 +176,83 @@ async fn open_secure_window(app: AppHandle, url: String) {
 
     let init_script = format!(r#"
         window.addEventListener('DOMContentLoaded', () => {{
-            console.log("🔥 NSL V22: Correct Tab + Telerik Select");
+            console.log("🔥 NSL V23: Sequential Loading (Cấp -> Load -> Trường)");
             const accounts = {}; 
             const IDS = {{
                 user: "ContentPlaceHolder1_tbU",
                 pass: "ContentPlaceHolder1_tbP",
-                // Lưu ý: ID cho Telerik Object không có đuôi _Input
+                // ID của Telerik Controller (không có đuôi _Input)
                 cap: "ctl00_ContentPlaceHolder1_cbCapHoc", 
                 truong: "ctl00_ContentPlaceHolder1_cbTruong",
                 btn: "ContentPlaceHolder1_btOK"
             }};
 
-            // 1. CHUYỂN TAB (BẮT BUỘC PHẢI CÓ)
             function ensureTabSelected() {{
                 let spans = document.querySelectorAll('.rtsTxt');
                 for (let s of spans) {{
                     if (s.innerText.trim() === "Tài khoản QLTH") {{
                         let link = s.closest('a.rtsLink');
                         if (link && !link.classList.contains('rtsSelected')) {{
-                            console.log(">> Clicking Tab QLTH");
                             link.click();
-                            return true; // Đã click, cần chờ load
+                            return true; 
                         }}
                     }}
                 }}
-                return false; // Đã ở đúng tab hoặc không tìm thấy
+                return false; 
             }}
 
-            // 2. HÀM ĐIỀN DỮ LIỆU CHUẨN (User/Pass: DOM, Cấp/Trường: Telerik Select)
+            // --- HÀM LOGIC CỐT LÕI V23 ---
             function smartFill(acc) {{
                 if (!acc) return;
                 
-                // A. User & Pass (Dùng DOM như cũ - bạn xác nhận cách này ok)
+                // 1. Điền User & Pass (Dùng DOM thuần cho nhanh)
                 let uEl = document.getElementById(IDS.user);
                 let pEl = document.getElementById(IDS.pass);
                 if (uEl) {{ uEl.value = acc.u; uEl.dispatchEvent(new Event('input', {{bubbles:true}})); }}
                 if (pEl) {{ pEl.value = acc.p; pEl.dispatchEvent(new Event('input', {{bubbles:true}})); }}
 
-                // B. Cấp & Trường (PHẢI DÙNG TELERIK API ĐỂ KHÔNG BỊ LỖI)
-                // Nếu chỉ điền DOM, server sẽ không nhận được ID và báo sai.
-                if (typeof $find !== 'undefined') {{
-                    
-                    // Điền Cấp trước
+                // 2. XỬ LÝ CẤP HỌC (Quan trọng: Phải kích hoạt Postback)
+                if (typeof $find !== 'undefined' && acc.c) {{
                     let comboCap = $find(IDS.cap);
-                    if (comboCap && acc.c) {{
-                        // Tìm Item trong danh sách có chữ khớp với dữ liệu
+                    
+                    if (comboCap) {{
+                        console.log(">> Đang chọn Cấp học:", acc.c);
+                        
+                        // Tìm Item trong danh sách khớp với text đã lưu
+                        // Ví dụ: acc.c = "Trung học cơ sở"
                         let item = comboCap.findItemByText(acc.c);
+                        
                         if (item) {{
-                            item.select(); // CHÌA KHÓA: Chọn item sẽ tự điền text và set value ẩn
+                            // Select() sẽ kích hoạt sự kiện ClientSelectedIndexChanged -> Gửi request lên server tải Trường
+                            item.select(); 
+                            
+                            // 3. ĐỢI & CHỌN TRƯỜNG (Delay 1.5s để chắc chắn server đã trả danh sách về)
+                            if (acc.t) {{
+                                console.log(">> Đang đợi danh sách trường tải về...");
+                                setTimeout(() => {{
+                                    let comboTruong = $find(IDS.truong);
+                                    if (comboTruong) {{
+                                        console.log(">> Đang chọn Trường:", acc.t);
+                                        let schoolItem = comboTruong.findItemByText(acc.t);
+                                        if (schoolItem) {{
+                                            schoolItem.select(); // Chọn chính xác item trường
+                                            console.log(">> Đã chọn xong Trường!");
+                                        }} else {{
+                                            console.warn("!! Không tìm thấy tên trường trong danh sách mới tải");
+                                            // Fallback: Nếu không tìm thấy, thử set text (ít hiệu quả nhưng có còn hơn không)
+                                            comboTruong.set_text(acc.t);
+                                        }}
+                                    }}
+                                }}, 1500); // Tăng delay lên 1500ms (1.5s) cho mạng chậm
+                            }}
                         }} else {{
-                            comboCap.set_text(acc.c); // Fallback
+                            // Nếu không tìm thấy Cấp trong list, điền text thô (chắc chắn sẽ lỗi nhưng để hiển thị)
+                            comboCap.set_text(acc.c);
                         }}
                     }}
-
-                    // Delay 1 chút để Cấp load xong mới điền Trường
-                    setTimeout(() => {{
-                        let comboTruong = $find(IDS.truong);
-                        if (comboTruong && acc.t) {{
-                            let item = comboTruong.findItemByText(acc.t);
-                            if (item) {{
-                                item.select(); // CHÌA KHÓA: Chọn item chuẩn
-                            }} else {{
-                                comboTruong.set_text(acc.t);
-                            }}
-                        }}
-                    }}, 800); // Đợi 800ms cho AJAX tải danh sách trường
                 }}
             }}
 
-            // 3. MENU CHỌN TÀI KHOẢN (UI)
             function showMenu() {{
                 let old = document.getElementById('nsl-menu-overlay'); if (old) old.remove();
                 let uIn = document.getElementById(IDS.user); if (!uIn) return;
@@ -260,9 +268,9 @@ async fn open_secure_window(app: AppHandle, url: String) {
                     item.style.cssText = 'padding:6px 10px;cursor:pointer;border-radius:4px;margin-bottom:2px;';
                     item.onmouseover = () => item.style.background = '#334155';
                     item.onmouseout = () => item.style.background = 'transparent';
-                    item.onmousedown = (e) => {{ // Dùng mousedown để ưu tiên hơn blur
+                    item.onmousedown = (e) => {{
                         e.preventDefault(); e.stopPropagation();
-                        smartFill(acc);
+                        smartFill(acc); // Gọi hàm điền thông minh
                         div.remove();
                     }};
                     div.appendChild(item);
@@ -273,7 +281,6 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 div.style.left = (rect.left + window.scrollX) + 'px';
                 document.body.appendChild(div);
 
-                // Click ra ngoài thì đóng
                 setTimeout(() => {{
                     document.addEventListener('click', function close(e) {{
                         if (!div.contains(e.target) && e.target !== uIn) {{
@@ -283,32 +290,24 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 }}, 100);
             }}
 
-            // 4. LOGIC KHỞI CHẠY (LOOP CHECK)
             let initialized = false;
-            
             function mainLoop() {{
-                // A. Luôn kiểm tra và click Tab nếu chưa đúng
                 ensureTabSelected();
-
                 let uIn = document.getElementById(IDS.user);
                 if (uIn) {{
-                    // B. Gắn sự kiện click vào ô User để hiện menu
                     if (!uIn.dataset.hooked) {{
                         uIn.dataset.hooked = "true";
                         uIn.addEventListener('click', (e) => {{ e.stopPropagation(); showMenu(); }});
                     }}
-
-                    // C. Auto-fill lần đầu tiên (nếu có TK và ô đang trống)
+                    // Auto-fill lần đầu
                     if (!initialized && accounts.length > 0 && !uIn.value) {{
-                        console.log(">> First load auto-fill");
-                        // Delay nhẹ 300ms để chắc chắn Telerik đã load xong script
-                        setTimeout(() => smartFill(accounts[0]), 300);
+                        setTimeout(() => smartFill(accounts[0]), 500); // Delay chút để trang ổn định
                         initialized = true;
                     }}
                 }}
             }}
 
-            // 5. CAPTURE DATA (ĐỂ LƯU MỚI)
+            // SAVING HOOK (Để lưu mới)
             function attachCapture() {{
                 const btn = document.getElementById(IDS.btn);
                 if (btn && !btn.dataset.captured) {{
@@ -317,16 +316,10 @@ async fn open_secure_window(app: AppHandle, url: String) {
                         let u = document.getElementById(IDS.user)?.value || "";
                         let p = document.getElementById(IDS.pass)?.value || "";
                         let c = "", t = "";
-                        
-                        // Lấy text hiển thị từ Telerik để lưu cho đẹp
                         if(typeof $find !== 'undefined') {{
                             c = $find(IDS.cap)?.get_text() || "";
                             t = $find(IDS.truong)?.get_text() || "";
                         }}
-                        // Fallback DOM
-                        if(!c) c = document.getElementById(IDS.cap + "_Input")?.value || "";
-                        if(!t) t = document.getElementById(IDS.truong + "_Input")?.value || "";
-
                         if (u && p) {{
                             let base = "https://nsl.local/save/";
                             let parts = [u, p, c, t].map(s => btoa(unescape(encodeURIComponent(s))));
@@ -336,9 +329,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 }}
             }}
 
-            // Chạy loop mỗi 500ms để đảm bảo Tab luôn đúng và Element đã load
             setInterval(() => {{ mainLoop(); attachCapture(); }}, 500);
-
         }});
     "#, accounts_json);
 
