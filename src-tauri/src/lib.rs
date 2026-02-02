@@ -78,11 +78,8 @@ async fn open_secure_window(app: AppHandle, url: String) {
         for acc in list {
             let p_dec = mc.decrypt_base64_to_string(&acc.pass).unwrap_or_default();
             items.push(format!(r#"{{"u":"{}","p":"{}","c":"{}","t":"{}"}}"#, 
-                acc.user.replace("\"", "\\\""), 
-                p_dec.replace("\"", "\\\""), 
-                acc.cap.replace("\"", "\\\""), 
-                acc.truong.replace("\"", "\\\"")
-            ));
+                acc.user.replace("\"", "\\\""), p_dec.replace("\"", "\\\""), 
+                acc.cap.replace("\"", "\\\""), acc.truong.replace("\"", "\\\"")));
         }
         accounts_json = format!("[{}]", items.join(","));
     }
@@ -97,110 +94,72 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 truong: "ctl00_ContentPlaceHolder1_cbTruong"
             }};
 
-            // HÀM CHỌN GIÁ TRỊ VÀ KÍCH HOẠT SERVER LOAD
-            function triggerTelerik(comboId, textValue, delayAfter) {{
-                return new Promise((resolve) => {{
-                    if (typeof $find === 'undefined') return resolve();
-                    const combo = $find(comboId);
+            async fn selectTelerik(comboId, textValue, delay) {{
+                return new Promise(resolve => {{
+                    if (typeof $find === 'undefined' || !textValue) return resolve();
+                    let combo = $find(comboId);
                     if (!combo) return resolve();
 
-                    console.log(">> Triggering:", comboId, textValue);
-                    
-                    const item = combo.findItemByText(textValue);
+                    let item = combo.findItemByText(textValue);
                     if (item) {{
-                        item.select(); 
-                        // Kích hoạt sự kiện thay đổi để Web thực hiện Postback
-                        if (combo.raise_selectedIndexChanged) {{
-                            combo.raise_selectedIndexChanged();
-                        }}
-                    }} else {{
-                        combo.set_text(textValue);
+                        item.select();
+                        if (combo.raise_selectedIndexChanged) combo.raise_selectedIndexChanged();
                     }}
-
-                    setTimeout(() => resolve(), delayAfter || 500);
+                    setTimeout(resolve, delay);
                 }});
             }}
 
             window.smartFill = async (acc) => {{
-                if (!acc) return;
-                console.log(">> Start smartFill for:", acc.u);
-                
-                // 1. Điền User & Pass
                 const u = document.getElementById(IDS.user);
                 const p = document.getElementById(IDS.pass);
-                if (u) {{ u.value = acc.u; u.dispatchEvent(new Event('input', {{bubbles:true}})); }}
-                if (p) {{ p.value = acc.p; p.dispatchEvent(new Event('input', {{bubbles:true}})); }}
+                if (u) u.value = acc.u;
+                if (p) p.value = acc.p;
 
-                // 2. Điền Cấp học & đợi Postback (1.5s)
-                await triggerTelerik(IDS.cap, acc.c, 1500);
-
-                // 3. Điền Trường học
-                await triggerTelerik(IDS.truong, acc.t, 500);
-                console.log(">> Fill complete");
+                // TRIGGER CẤP HỌC -> ĐỢI LOAD TRƯỜNG -> TRIGGER TRƯỜNG
+                await selectTelerik(IDS.cap, acc.c, 1800);
+                await selectTelerik(IDS.truong, acc.t, 500);
             }};
 
-            let isAutoFilled = false;
-            let tabRetries = 0;
-
-            const mainLoop = () => {{
-                // A. CHUYỂN TAB
-                const spans = document.querySelectorAll('.rtsTxt');
-                let foundTab = false;
-                for (let s of spans) {{
+            setInterval(() => {{
+                // Force Tab
+                document.querySelectorAll('.rtsTxt').forEach(s => {{
                     if (s.innerText.trim() === "Tài khoản QLTH") {{
-                        foundTab = true;
-                        const link = s.closest('a.rtsLink');
-                        if (link && !link.classList.contains('rtsSelected')) {{
-                            link.click();
-                            return; // Dừng lại để trang load tab mới
-                        }}
+                        let link = s.closest('a.rtsLink');
+                        if (link && !link.classList.contains('rtsSelected')) link.click();
                     }}
-                }}
+                }});
 
-                // B. KIỂM TRA INPUT VÀ AUTO-FILL
                 const uIn = document.getElementById(IDS.user);
-                if (uIn) {{
-                    // Gắn menu chọn TK
-                    if (!uIn.dataset.hook) {{
-                        uIn.dataset.hook = "true";
-                        uIn.addEventListener('click', (e) => {{
-                            e.stopPropagation();
-                            let menu = document.getElementById('nsl-menu');
-                            if (menu) menu.remove();
-                            menu = document.createElement('div');
-                            menu.id = 'nsl-menu';
-                            menu.style.cssText = 'position:absolute;z-index:999999;background:#1e293b;border:1px solid #475569;border-radius:6px;padding:6px;min-width:250px;color:white;top:'+(uIn.getBoundingClientRect().bottom + window.scrollY + 5)+'px;left:'+(uIn.getBoundingClientRect().left + window.scrollX)+'px;';
-                            accounts.forEach(a => {{
-                                const item = document.createElement('div');
-                                item.innerHTML = `<b>${{a.u}}</b><br><small style="color:#94a3b8">${{a.t}}</small>`;
-                                item.style.cssText = 'padding:8px;cursor:pointer;border-radius:4px;border-bottom:1px solid #334155;';
-                                item.onmousedown = (ev) => {{ ev.preventDefault(); window.smartFill(a); menu.remove(); }};
-                                menu.appendChild(item);
-                            }});
-                            document.body.appendChild(menu);
+                if (uIn && !uIn.dataset.hook) {{
+                    uIn.dataset.hook = "true";
+                    uIn.addEventListener('click', (e) => {{
+                        e.stopPropagation();
+                        let menu = document.getElementById('nsl-menu'); if (menu) menu.remove();
+                        menu = document.createElement('div');
+                        menu.id = 'nsl-menu';
+                        menu.style.cssText = 'position:absolute;z-index:999999;background:#1e293b;border:1px solid #475569;border-radius:6px;padding:6px;min-width:250px;color:white;box-shadow:0 4px 15px rgba(0,0,0,0.5);';
+                        accounts.forEach(a => {{
+                            let div = document.createElement('div');
+                            div.innerHTML = `<b>${{a.u}}</b><br><small style="color:#94a3b8">${{a.t}}</small>`;
+                            div.style.cssText = 'padding:8px;cursor:pointer;border-radius:4px;';
+                            div.onmouseover = () => div.style.background = '#334155';
+                            div.onmouseout = () => div.style.background = 'transparent';
+                            div.onmousedown = (ev) => {{ ev.preventDefault(); window.smartFill(a); menu.remove(); }};
+                            menu.appendChild(div);
                         }});
-                    }}
-
-                    // AUTO FILL TÀI KHOẢN ĐẦU TIÊN
-                    if (!isAutoFilled && accounts.length > 0) {{
-                        // Chỉ auto-fill khi Telerik đã sẵn sàng
-                        if (typeof $find !== 'undefined' && $find(IDS.cap)) {{
-                            console.log(">> Auto-filling first account...");
-                            window.smartFill(accounts[0]);
-                            isAutoFilled = true;
-                        }}
-                    }}
+                        document.body.appendChild(menu);
+                        let r = uIn.getBoundingClientRect();
+                        menu.style.top = (r.bottom + window.scrollY + 5)+'px';
+                        menu.style.left = (r.left + window.scrollX)+'px';
+                    }});
                 }}
-            }};
-
-            setInterval(mainLoop, 1000);
+            }}, 1000);
         }})();
     "#, accounts_json);
 
     if let Some(win) = app.get_webview_window("embedded_browser") { let _ = win.close(); }
     let main = app.get_webview_window("main").unwrap();
     let size = main.inner_size().unwrap();
-    
     let app_handle = app.clone();
     let domain_captured = domain.clone();
 
@@ -208,17 +167,17 @@ async fn open_secure_window(app: AppHandle, url: String) {
         .title("Browser").decorations(false).parent(&main).unwrap()
         .inner_size((size.width as f64) - 260.0, (size.height as f64) - 64.0).position(260.0, 64.0)
         .initialization_script(&init_script)
-        .on_navigation(move |u: &Url| {
-            if u.as_str().starts_with("https://nsl.local/save/") {
+        .on_navigation(move |u: &Url| {{
+            if u.as_str().starts_with("https://nsl.local/save/") {{
                 let p: Vec<&str> = u.as_str().split('/').collect();
-                if p.len() >= 8 {
+                if (p.len() >= 8) {{
                     let decode = |idx: usize| String::from_utf8(general_purpose::STANDARD.decode(p[idx]).unwrap_or_default()).unwrap_or_default();
                     let _ = perform_save_account(&app_handle, domain_captured.clone(), decode(4), decode(5), decode(6), decode(7));
-                }
+                }}
                 return false;
-            }
+            }}
             true
-        })
+        }})
         .build();
 }
 
@@ -226,6 +185,10 @@ async fn open_secure_window(app: AppHandle, url: String) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // PHẢI CÓ DÒNG NÀY ĐỂ TÍNH NĂNG CẬP NHẬT HOẠT ĐỘNG
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![save_account, get_all_accounts, delete_account, open_secure_window, navigate_webview, hide_embedded_view, update_webview_layout])
         .run(tauri::generate_context!())
         .expect("error");
