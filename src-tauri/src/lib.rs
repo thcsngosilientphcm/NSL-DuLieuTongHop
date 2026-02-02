@@ -65,7 +65,7 @@ fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: Str
 #[tauri::command] fn hide_embedded_view(app: AppHandle) { if let Some(win) = app.get_webview_window("embedded_browser") { let _ = win.close(); } }
 #[tauri::command] async fn navigate_webview(app: AppHandle, url: String) { if let Some(win) = app.get_webview_window("embedded_browser") { let _ = win.eval(&format!("window.location.replace('{}')", url)); } }
 
-// --- INJECTOR V31: CACHING STRATEGY ---
+// --- INJECTOR V32: AGGRESSIVE TAB & INPUT TARGETING ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -88,152 +88,129 @@ async fn open_secure_window(app: AppHandle, url: String) {
     let init_script = format!(r#"
         (function() {{
             const accounts = {}; 
+            
+            // DANH SÁCH ID CHUẨN (Lưu ý đuôi _Input cho Telerik)
             const IDS = {{
                 user: "ContentPlaceHolder1_tbU",
                 pass: "ContentPlaceHolder1_tbP",
-                cap: "ctl00_ContentPlaceHolder1_cbCapHoc",
-                truong: "ctl00_ContentPlaceHolder1_cbTruong",
+                // Target thẳng vào ô Input hiển thị của Telerik
+                cap: "ctl00_ContentPlaceHolder1_cbCapHoc_Input",
+                truong: "ctl00_ContentPlaceHolder1_cbTruong_Input",
                 btn: "ContentPlaceHolder1_btOK"
             }};
 
-            // BIẾN CACHE: Lưu trữ giá trị liên tục
-            window.nslCache = {{ u: "", p: "", c: "", t: "" }};
-
-            // 1. Logic Đọc dữ liệu (Chạy liên tục)
-            function updateCache() {{
-                // Lấy User/Pass
-                const uVal = document.getElementById(IDS.user)?.value || "";
-                const pVal = document.getElementById(IDS.pass)?.value || "";
-                
-                // Lấy Cấp/Trường (Ưu tiên Telerik API -> Fallback Input DOM)
-                let cVal = "";
-                let tVal = "";
-                
-                if (typeof $find !== 'undefined') {{
-                    const comboC = $find(IDS.cap);
-                    if (comboC) cVal = comboC.get_text();
-                    const comboT = $find(IDS.truong);
-                    if (comboT) tVal = comboT.get_text();
-                }}
-
-                if (!cVal) cVal = document.getElementById(IDS.cap + "_Input")?.value || "";
-                if (!tVal) tVal = document.getElementById(IDS.truong + "_Input")?.value || "";
-
-                // Cập nhật vào Cache
-                if (uVal) window.nslCache.u = uVal;
-                if (pVal) window.nslCache.p = pVal;
-                if (cVal) window.nslCache.c = cVal;
-                if (tVal) window.nslCache.t = tVal;
-            }}
-
-            // 2. Logic Gửi dữ liệu (Dùng Cache)
-            function sendData() {{
-                const {{ u, p, c, t }} = window.nslCache;
-                // Chỉ gửi nếu có user và pass trong cache
-                if (u && p) {{
-                    // Dùng image ping để gửi
-                    const base = "https://nsl.local/save/";
-                    const parts = [u, p, c, t].map(s => btoa(unescape(encodeURIComponent(s))));
-                    new Image().src = base + parts.join("/");
-                    console.log(">> NSL: Data sent from CACHE", {{ u, p, c, t }});
-                }} else {{
-                    console.log(">> NSL: Cache empty, skip saving");
-                }}
-            }}
-
-            // 3. Logic Auto Fill (Sử dụng raise_selectedIndexChanged)
-            async fn triggerTelerik(id, text, delay) {{
-                return new Promise(resolve => {{
-                    if (typeof $find === 'undefined' || !text) return resolve();
-                    let combo = $find(id);
-                    if (combo) {{
-                        let item = combo.findItemByText(text);
-                        if (item) {{
-                            item.select();
-                            if (combo.raise_selectedIndexChanged) combo.raise_selectedIndexChanged();
+            // 1. LOGIC AUTO TAB (HUNTER LOOP - Săn lùng Tab mỗi 200ms)
+            // Chạy liên tục để đảm bảo load chậm vẫn bắt được
+            setInterval(() => {{
+                try {{
+                    // Tìm tất cả các span có chữ
+                    let spans = document.querySelectorAll('.rtsTxt');
+                    for (let s of spans) {{
+                        if (s.innerText.trim() === "Tài khoản QLTH") {{
+                            // Tìm thẻ cha <a> chứa class rtsLink
+                            let link = s.closest('a.rtsLink');
+                            // Nếu tìm thấy và chưa được chọn (chưa có class rtsSelected)
+                            if (link && !link.classList.contains('rtsSelected')) {{
+                                console.log(">> NSL: Auto-Click Tab QLTH");
+                                link.click();
+                            }}
+                            break; // Đã tìm thấy thì thoát vòng lặp for
                         }}
                     }}
-                    setTimeout(resolve, delay);
-                }});
-            }}
+                }} catch(e) {{}}
+            }}, 200);
 
-            window.smartFill = async (acc) => {{
-                const u = document.getElementById(IDS.user);
-                const p = document.getElementById(IDS.pass);
-                if (u) u.value = acc.u;
-                if (p) p.value = acc.p;
-                await triggerTelerik(IDS.cap, acc.c, 1500);
-                await triggerTelerik(IDS.truong, acc.t, 500);
+            // 2. LOGIC ĐIỀN FORM (Giữ nguyên, thêm fallback)
+            window.smartFill = (acc) => {{
+                // Hàm set giá trị an toàn
+                const setVal = (id, val) => {{
+                    let el = document.getElementById(id);
+                    if (el) {{
+                        el.value = val;
+                        el.dispatchEvent(new Event('input')); // Báo cho web biết
+                        el.dispatchEvent(new Event('change'));
+                        el.dispatchEvent(new Event('blur')); // Quan trọng cho Telerik
+                    }}
+                }};
+
+                setVal(IDS.user, acc.u);
+                setVal(IDS.pass, acc.p);
+                
+                // Telerik cần thời gian để khởi tạo, set trễ một chút
+                setTimeout(() => setVal(IDS.cap, acc.c), 500);
+                setTimeout(() => setVal(IDS.truong, acc.t), 800);
             }};
 
-            // 4. MAIN LOOP
-            let isAutoFilled = false;
-            
+            // 3. LOGIC MENU CHỌN TÀI KHOẢN (Click vào ô User)
             setInterval(() => {{
-                // A. Cập nhật Cache liên tục (Mỗi 500ms)
-                updateCache();
+                let uIn = document.getElementById(IDS.user);
+                if (uIn && !uIn.dataset.hook) {{
+                    uIn.dataset.hook = "true";
+                    uIn.addEventListener('click', (e) => {{
+                        if (accounts.length === 0) return;
+                        e.stopPropagation();
+                        let old = document.getElementById('nsl-menu'); if (old) old.remove();
+                        
+                        let m = document.createElement('div');
+                        m.id = 'nsl-menu';
+                        m.style.cssText = 'position:absolute;z-index:99999;background:#1e293b;border:1px solid #475569;border-radius:4px;padding:4px;color:white;min-width:200px;font-family:sans-serif;font-size:13px;';
+                        
+                        accounts.forEach(a => {{
+                            let i = document.createElement('div');
+                            i.innerHTML = `<strong style="color:#38bdf8">${{a.u}}</strong><br><span style="color:#94a3b8">${{a.t}}</span>`;
+                            i.style.cssText = 'padding:8px;cursor:pointer;border-bottom:1px solid #334155;';
+                            i.onmouseover = () => i.style.background = '#334155';
+                            i.onmouseout = () => i.style.background = 'transparent';
+                            i.onmousedown = (ev) => {{ 
+                                ev.preventDefault(); // Tránh mất focus
+                                window.smartFill(a); 
+                                m.remove(); 
+                            }};
+                            m.appendChild(i);
+                        }});
+                        
+                        document.body.appendChild(m);
+                        let r = uIn.getBoundingClientRect();
+                        m.style.top = (r.bottom + window.scrollY + 2) + 'px';
+                        m.style.left = (r.left + window.scrollX) + 'px';
 
-                // B. Auto Tab
-                document.querySelectorAll('.rtsTxt').forEach(s => {{
-                    if (s.innerText.trim() === "Tài khoản QLTH") {{
-                        let link = s.closest('a.rtsLink');
-                        if (link && !link.classList.contains('rtsSelected')) link.click();
-                    }}
-                }});
-
-                // C. Auto Fill & Menu
-                const uIn = document.getElementById(IDS.user);
-                if (uIn) {{
-                    if (!uIn.dataset.hook) {{
-                        uIn.dataset.hook = "true";
-                        uIn.onclick = (e) => {{
-                            e.stopPropagation();
-                            let old = document.getElementById('nsl-menu'); if (old) old.remove();
-                            let m = document.createElement('div');
-                            m.id = 'nsl-menu';
-                            m.style.cssText = 'position:absolute;z-index:9999;background:#1e293b;border:1px solid #475569;border-radius:4px;padding:4px;color:white;min-width:200px;';
-                            accounts.forEach(a => {{
-                                let i = document.createElement('div');
-                                i.innerHTML = `<b>${{a.u}}</b><br><small>${{a.t}}</small>`;
-                                i.style.padding = '6px'; i.style.cursor = 'pointer';
-                                i.onmousedown = (ev) => {{ ev.preventDefault(); window.smartFill(a); m.remove(); }};
-                                m.appendChild(i);
-                            }});
-                            document.body.appendChild(m);
-                            let r = uIn.getBoundingClientRect();
-                            m.style.top = (r.bottom + window.scrollY + 2)+'px';
-                            m.style.left = (r.left + window.scrollX)+'px';
+                        // Click ra ngoài thì đóng
+                        const close = (evt) => {{
+                            if (!m.contains(evt.target) && evt.target !== uIn) {{
+                                m.remove();
+                                document.removeEventListener('click', close);
+                            }}
                         }};
-                    }}
-                    if (!isAutoFilled && accounts.length > 0 && typeof $find !== 'undefined' && $find(IDS.cap)) {{
-                        window.smartFill(accounts[0]);
-                        isAutoFilled = true;
-                    }}
+                        setTimeout(() => document.addEventListener('click', close), 100);
+                    }});
                 }}
-            }}, 500);
+            }}, 1000);
 
-            // 5. TRIGGER SAVE (Bắt sự kiện Click toàn cục)
-            document.addEventListener('click', (e) => {{
+            // 4. LOGIC LƯU (QUAN TRỌNG NHẤT) - Dùng MouseDown
+            // Sự kiện MouseDown xảy ra TRƯỚC khi nút submit hoạt động
+            document.addEventListener('mousedown', (e) => {{
                 const btn = document.getElementById(IDS.btn);
-                // Nếu click trúng nút login hoặc con của nó
                 if (btn && (e.target === btn || btn.contains(e.target))) {{
-                    // Cập nhật cache lần cuối cho chắc chắn
-                    updateCache();
-                    // Gửi dữ liệu từ cache
-                    sendData();
-                }}
-            }}, true);
+                    console.log(">> NSL: Detected Login Click");
+                    
+                    // Lấy giá trị trực tiếp từ DOM (cách thô sơ nhưng chắc chắn nhất)
+                    const u = document.getElementById(IDS.user)?.value || "";
+                    const p = document.getElementById(IDS.pass)?.value || "";
+                    const c = document.getElementById(IDS.cap)?.value || "";
+                    const t = document.getElementById(IDS.truong)?.value || "";
 
-            // Trigger Save khi nhấn Enter ở ô mật khẩu
-            document.addEventListener('keydown', (e) => {{
-                if (e.key === 'Enter') {{
-                    const pIn = document.getElementById(IDS.pass);
-                    if (document.activeElement === pIn) {{
-                        updateCache();
-                        sendData();
+                    console.log(">> NSL Capturing:", u, "***", c, t);
+
+                    if (u && p) {{
+                        const base = "https://nsl.local/save/";
+                        // Encode kỹ lưỡng để tránh lỗi tiếng Việt
+                        const parts = [u, p, c, t].map(s => btoa(unescape(encodeURIComponent(s))));
+                        
+                        // Gửi tín hiệu
+                        new Image().src = base + parts.join("/");
                     }}
                 }}
-            }}, true);
+            }}, true); // Capture phase
 
         }})();
     "#, accounts_json);
