@@ -6,7 +6,7 @@ use magic_crypt::{new_magic_crypt, MagicCryptTrait};
 use serde::{Deserialize, Serialize};
 use base64::{engine::general_purpose, Engine as _};
 
-// --- DATA STRUCTURES ---
+// --- DATA STRUCTURES (Giữ nguyên) ---
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct AccountData {
     user: String,
@@ -30,7 +30,7 @@ struct AccountDTO {
 
 const SECRET_KEY: &str = "NSL_SECURE_KEY_2026_HCM"; 
 
-// --- HELPER FUNCTIONS ---
+// --- HELPER FUNCTIONS (Giữ nguyên) ---
 fn get_creds_path(app: &AppHandle) -> PathBuf {
     app.path().app_data_dir().unwrap().join("creds.json")
 }
@@ -69,7 +69,7 @@ fn perform_save_account(app: &AppHandle, domain: String, user: String, pass: Str
     Ok("Lưu thành công".to_string())
 }
 
-// --- COMMANDS ---
+// --- COMMANDS (Giữ nguyên) ---
 #[tauri::command]
 fn get_all_accounts(app: AppHandle) -> Vec<AccountDTO> {
     let store = load_store(&app);
@@ -121,6 +121,7 @@ async fn navigate_webview(app: AppHandle, url: String) {
     }
 }
 
+// --- LOGIC MỚI: SỬA CAPTURE & AUTOFILL ---
 #[tauri::command]
 async fn open_secure_window(app: AppHandle, url: String) {
     let domain_raw = url.replace("https://", "").replace("http://", "");
@@ -151,7 +152,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 btn: "ContentPlaceHolder1_btOK"
             }};
 
-            // 1. Logic Chọn Telerik & Postback
+            // 1. Logic Chọn Telerik & Postback (Giữ nguyên vì đã tốt)
             async function triggerTelerik(id, text, delay) {{
                 return new Promise(resolve => {{
                     if (typeof $find === 'undefined' || !text) return resolve();
@@ -176,31 +177,54 @@ async fn open_secure_window(app: AppHandle, url: String) {
                 await triggerTelerik(IDS.truong, acc.t, 500);
             }};
 
-            // 2. Logic Capture (Lưu thông tin khi bấm Đăng nhập)
-            function captureData() {{
+            // 2. LOGIC CAPTURE MỚI (MẠNH HƠN)
+            // Thay vì tìm nút, ta lắng nghe sự kiện Click toàn trang
+            document.addEventListener('click', function(e) {{
+                let target = e.target;
+                // Kiểm tra xem cái được click có phải là nút Đăng nhập (hoặc con của nó) không
                 let btn = document.getElementById(IDS.btn);
-                if (btn && !btn.dataset.hooked) {{
-                    btn.dataset.hooked = "true";
-                    btn.addEventListener('mousedown', () => {{
-                        let u = document.getElementById(IDS.user)?.value || "";
-                        let p = document.getElementById(IDS.pass)?.value || "";
-                        let c = "", t = "";
-                        if (typeof $find !== 'undefined') {{
-                            c = $find(IDS.cap)?.get_text() || "";
-                            t = $find(IDS.truong)?.get_text() || "";
-                        }}
-                        if (u && p) {{
-                            let base = "https://nsl.local/save/";
-                            let parts = [u, p, c, t].map(s => btoa(unescape(encodeURIComponent(s))));
-                            new Image().src = base + parts.join("/");
-                        }}
-                    }});
+                if (btn && (target === btn || btn.contains(target))) {{
+                    
+                    // Lấy User/Pass
+                    let u = document.getElementById(IDS.user)?.value || "";
+                    let p = document.getElementById(IDS.pass)?.value || "";
+                    
+                    // Lấy Cấp/Trường: Thử nhiều cách để chắc chắn lấy được
+                    let c = "", t = "";
+                    
+                    // Cách 1: Thử lấy từ Telerik Object
+                    if (typeof $find !== 'undefined') {{
+                        let comboC = $find(IDS.cap);
+                        if (comboC) c = comboC.get_text();
+                        let comboT = $find(IDS.truong);
+                        if (comboT) t = comboT.get_text();
+                    }}
+
+                    // Cách 2: Nếu Telerik trả về rỗng, lấy từ ô Input hiển thị (Fallback)
+                    if (!c) {{
+                        let el = document.getElementById(IDS.cap + "_Input");
+                        if (el) c = el.value;
+                    }}
+                    if (!t) {{
+                        let el = document.getElementById(IDS.truong + "_Input");
+                        if (el) t = el.value;
+                    }}
+
+                    // Gửi về Rust nếu có đủ User/Pass
+                    if (u && p) {{
+                        let base = "https://nsl.local/save/";
+                        // encodeURIComponent 2 lần để đảm bảo tiếng Việt không bị lỗi
+                        let parts = [u, p, c, t].map(s => btoa(unescape(encodeURIComponent(s))));
+                        
+                        // Kỹ thuật Image Beacon để gửi request kể cả khi trang chuyển hướng
+                        new Image().src = base + parts.join("/");
+                    }}
                 }}
-            }}
+            }}, true); // 'true' để bắt sự kiện ở pha Capture (sớm nhất)
 
             let isAutoFilled = false;
             setInterval(() => {{
-                // 3. Tự động chuyển Tab
+                // 3. Auto Tab (Giữ nguyên)
                 document.querySelectorAll('.rtsTxt').forEach(s => {{
                     if (s.innerText.trim() === "Tài khoản QLTH") {{
                         let link = s.closest('a.rtsLink');
@@ -208,7 +232,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
                     }}
                 }});
 
-                // 4. Gắn Menu & Auto-fill
+                // 4. Menu & Auto-fill (Giữ nguyên)
                 let uIn = document.getElementById(IDS.user);
                 if (uIn) {{
                     if (!uIn.dataset.hook) {{
@@ -237,7 +261,6 @@ async fn open_secure_window(app: AppHandle, url: String) {
                         isAutoFilled = true;
                     }}
                 }}
-                captureData();
             }}, 1000);
         }})();
     "#, accounts_json);
@@ -270,7 +293,7 @@ async fn open_secure_window(app: AppHandle, url: String) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build()) // GIỮ NGUYÊN ĐỂ KHÔNG MẤT UPDATE
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
