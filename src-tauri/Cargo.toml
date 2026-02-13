@@ -1,6 +1,6 @@
 [package]
 name = "nsl-dulieutonghop"
-version = "1.0.33"
+version = "1.0.34"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -13,8 +13,11 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-# KHÔNG CẦN "unstable" NỮA VÌ TA DÙNG CÁCH ỔN ĐỊNH
-tauri = { version = "2", features = [] } 
+# [SỬA LỖI TẠI ĐÂY]
+# 1. Dùng bản 2.0.0-rc để đảm bảo mới nhất
+# 2. Xóa "webview", thêm "unstable" để dùng WebviewBuilder
+tauri = { version = "^2.0.0", features = ["devtools", "unstable"] } 
+
 tauri-plugin-shell = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
@@ -22,7 +25,8 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.21"
-magic-crypt = "3.1" # Dùng gạch ngang (-)
+magic-crypt = "3.1"
+
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
