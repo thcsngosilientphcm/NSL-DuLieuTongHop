@@ -264,6 +264,20 @@
           <p class="text-slate-300">Hệ thống hỗ trợ nhập liệu và quản lý dữ liệu tập trung.</p>
         </div>
       </div>
+      <!-- Thanh kiểm tra phiên bản -->
+      <div class="shrink-0 flex items-center gap-4 px-6 py-3 border-t border-white/10 bg-black/30">
+        <button id="btn-check-update"
+          class="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white text-xs px-4 py-2 rounded-lg font-bold transition-colors whitespace-nowrap">
+          <span id="update-spinner"
+            class="inline-block w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></span>
+          <span id="update-btn-text">Đang kiểm tra...</span>
+        </button>
+        <span id="update-status" class="text-slate-400 text-xs flex-1">&gt;&gt; Đang kết nối máy chủ...</span>
+        <div class="text-right whitespace-nowrap">
+          <div class="text-[10px] text-slate-500 uppercase tracking-wider">Phiên bản</div>
+          <div id="current-version" class="text-cyan-400 font-bold text-sm">v1.0.35</div>
+        </div>
+      </div>
     </section>
 
     <section id="view-passwords" class="hidden flex-1 p-6 bg-[#0c1218] flex-col overflow-hidden">
